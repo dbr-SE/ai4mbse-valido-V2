@@ -3,7 +3,7 @@
 Ein KI-gestützter Assistent für **Catia Magic System of Systems Architect** (Cameo), entwickelt zur Optimierung von Traceability-Reviews und zur Identifikation von "Muda" (Verschwendung) im Systems Engineering.
 
 > **Status:** Prototyp (Mockup-Phase)
-> **Technologie:** Java 11, Swing, Maven
+> **Technologie:** Java 17, Swing, Maven
 
 ## 🎯 Features des Prototypen
 
