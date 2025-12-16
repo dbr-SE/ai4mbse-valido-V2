@@ -60,22 +60,12 @@ public class Create_Rule {
                         "Scope:\n" +
                         "- Elementtypen: %s\n" +
                         "- Pakete: %s\n" +
-                        "- Stereotypen: %s\n" +
-                        "\n" +
-                        "Fachliche Prüflogik:\n" +
-                        "%s\n" +
-                        "\n" +
-                        "Gewünschtes Ausgabeformat:\n" +
-                        "%s\n" +
-                        "\n" +
-                        "Strenge: %s\n" +
-                        "Normen: %s\n" +
                         "\n" +
                         "Beispiele:\n" +
                         "- Korrekt: %s\n" +
                         "- Fehlerhaft: %s\n" +
                         "\n" +
-                        "Sprache: %s\n" +
+                        "Sprache: deutsch" +
                         "Persona: %s\n" +
                         "Tonalität: %s\n" +
                         "\n" +
@@ -101,14 +91,8 @@ public class Create_Rule {
                 c.getZiel(),
                 c.getElementtypen(),
                 c.getPakete(),
-                c.getStereotypen(),
-                c.getPrueflogik(),
-                c.getAusgabeformat(),
-                c.getStrenge(),
-                c.getNormen(),
                 c.getBeispielKorrekt(),
                 c.getBeispielFehlerhaft(),
-                c.getSprache(),
                 c.getPersona(),
                 c.getTonalitaet()
         );
