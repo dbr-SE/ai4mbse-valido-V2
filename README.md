@@ -26,6 +26,20 @@ Der `main`-Branch enthält die stabilste Version des Plugins.
 * **GUI:** Nutzt das neueste User Interface (MainFrame/Orchestrator Merge).
 
 ---
+## 📚 Glossar: Local vs. Origin
+Damit wir alle vom Gleichen reden:
+
+### 💻 Local (Lokal)
+Das ist dein Laptop. Änderungen, die du hier machst (speichern, committen), sieht erst mal nur DU. Wenn dein Laptop kaputt geht, sind "lokale" Änderungen weg.
+* **Befehle:** `git commit`, `git checkout`, `.\build.ps1`
+
+### ☁️ Origin (Remote/Server)
+Das ist GitHub (die Cloud). Erst wenn du etwas hierhin "pushst", können es die anderen (Simon, Moritz, etc.) sehen.
+* `git push`: Schiebt deine lokalen Änderungen auf den Server (Origin).
+* `git pull`: Holt Änderungen vom Server auf deinen Laptop (Local).
+* `git fetch`: Schaut auf dem Server nach Neuerungen, lädt sie aber noch nicht in deine Dateien.
+
+---
 
 ## 🌳 Unsere Branching-Strategie (Der 3-Ebenen-Workflow)
 
@@ -131,21 +145,6 @@ git fetch origin
 # 3. Den main vom Server in deinen lokalen Branch mergen
 git merge origin/main
 ```
----
-
-## 📚 Glossar: Local vs. Origin
-Damit wir alle vom Gleichen reden:
-
-### 💻 Local (Lokal)
-Das ist dein Laptop. Änderungen, die du hier machst (speichern, committen), sieht erst mal nur DU. Wenn dein Laptop kaputt geht, sind "lokale" Änderungen weg.
-* **Befehle:** `git commit`, `git checkout`, `.\build.ps1`
-
-### ☁️ Origin (Remote/Server)
-Das ist GitHub (die Cloud). Erst wenn du etwas hierhin "pushst", können es die anderen (Simon, Moritz, etc.) sehen.
-* `git push`: Schiebt deine lokalen Änderungen auf den Server (Origin).
-* `git pull`: Holt Änderungen vom Server auf deinen Laptop (Local).
-* `git fetch`: Schaut auf dem Server nach Neuerungen, lädt sie aber noch nicht in deine Dateien.
-
 ---
 
 ## ⚠️ Goldene Regeln
