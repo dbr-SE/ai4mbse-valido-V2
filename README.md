@@ -14,25 +14,144 @@ Dieser Prototyp demonstriert die geplante Benutzeroberfläche (GUI) und die User
 * **Natural Language Rules:** Eingabe von Prüfregeln in natürlicher Sprache (Simulation).
 * **AI-Feedback:** Simulation von Verbesserungsvorschlägen durch einen KI-Agenten.
 
-## 🛠 Developer Guide & Simulation Mode
 
-Dieses Projekt verwendet ein **Mock-Service-Pattern**, um die Entwicklung der UI von der Backend-Logik (Catia API & KI-Anbindung) zu entkoppeln. Dies ermöglicht Rapid Prototyping ohne eine laufende Instanz von Catia Magic.
 
-### Wie der Simulations-Modus funktioniert
+# 📘 AI4MBSE - Entwickler Guide & Workflow
 
-Das Plug-in ist aktuell für den **Demo-Modus** konfiguriert:
+Willkommen im Projekt! Diese Anleitung definiert unseren gemeinsamen Workflow, damit wir uns nicht gegenseitig den Code überschreiben und der `main`-Branch immer stabil bleibt.
 
-* **Mock-Service:** Die Klasse `com.ai4mbse.service.mock.MockReviewService` simuliert die Antworten.
-* **Daten:** Es werden statische Dummy-Daten zurückgegeben (z.B. simulierte "Muda"-Funde).
-* **Latenz:** Eine künstliche Verzögerung simuliert die Berechnungszeit der KI, um Ladebalken zu testen.
-
-### Anleitung für Entwickler
-
-Um das Projekt in IntelliJ IDEA zu starten:
-
-1.  Stellen Sie sicher, dass **Java 17 SDK** konfiguriert ist.
-2.  Führen Sie die Klasse `com.ai4mbse.app.App` aus.
-3.  Klicken Sie im UI auf **"Muda Detection"**, um den Analyse-Workflow zu simulieren.
+## 🚀 Aktueller Status (main)
+Der `main`-Branch enthält die stabilste Version des Plugins.
+* **Features:** Automatischer XML-Export nach Öffnen eines Modells ist implementiert.
+* **GUI:** Nutzt das neueste User Interface (MainFrame/Orchestrator Merge).
 
 ---
-*Projekt im Rahmen des AI4MBSE Forschungsprojekts.*
+
+## 🌳 Unsere Branching-Strategie (Der 3-Ebenen-Workflow)
+
+Wir arbeiten nach einem strengen hierarchischen Prinzip. Bitte haltet euch daran, um Merge-Konflikte zu vermeiden.
+
+### 1. Ebene: `main` (Heilig!)
+* Hier liegt der funktionierende Code.
+* **Niemals** direkt hierhin pushen.
+* **Niemals** direkt von `features/` hierhin mergen.
+
+### 2. Ebene: Persönliche Branches (`Simon`, `Moritz`, `Marius`, `Michael`, `Dominik`)
+* Jedes Teammitglied hat seinen eigenen Branch (z.B. `Dominik`).
+* Dies ist dein persönlicher "Sammelplatz" (Staging Area).
+* **Verantwortung:** Du bist dafür zuständig, dass dein Branch regelmäßig in `main` gemerged wird. Es dürfen sich keine riesigen Änderungen anstauen!
+
+### 3. Ebene: `features/` (Die Werkstatt)
+* In diesem Unterordner befinden sich die Branches, in denen die eigentliche Entwicklung stattfindet.
+* Wenn du etwas Neues entwickeln oder ausprobieren willst, erstelle hier einen Branch (z.B. `features/neue-buttons`).
+* **Regel:** Diese Features werden **immer** von deinem **persönlichen Branch** abgeleitet und auch nur dorthin zurück gepusht.
+
+---
+
+## 🛠️ Workflow: Wie entwickle ich ein neues Feature?
+
+### Schritt 1: Feature-Branch erstellen
+Du leitest deinen Feature-Branch **immer von deinem persönlichen Branch** ab (nie vom main!).
+
+Stelle sicher, dass dein persönlicher Branch aktuell ist und erstelle dann den Feature-Branch.
+*Beispiel für Dominik:*
+
+```bash
+# 1. Auf deinen persönlichen Branch wechseln
+git checkout Dominik
+
+# 2. Den neuesten Stand holen (falls du woanders gearbeitet hast)
+git pull origin Dominik
+
+# 3. Neuen Feature Branch davon ableiten (WICHTIG!)
+git checkout -b features/neue-buttons Dominik
+```
+
+## Schritt 2: Entwickeln & Builden (Wichtig!)
+Bevor du deine Änderungen in CATIA Magic testen kannst, muss der Java-Code kompiliert werden. Das Plugin funktioniert sonst nicht mit dem neuen Code.
+
+
+**Befehl:** Führe im Terminal im Projektordner folgendes aus:
+
+```powershell
+.\build.ps1
+```
+
+**Wann muss ich das tun?**
+* **Einmalig** vor der allerersten Nutzung.
+* **Jedes Mal**, wenn du `.java` Code geändert hast und die Änderung in CATIA sehen willst.
+
+---
+
+## Schritt 3: Arbeit sichern (Commit & Push)
+Halte deine Features klein! Konzentriere dich auf eine Aufgabe. Wenn fertig:
+
+```bash
+git add .
+git commit -m "Feat: Beschreibung was ich gemacht habe"
+
+# Pushen in den feature branch auf dem Server
+git push origin features/mein-neues-feature
+```
+
+---
+
+## Schritt 4: In den persönlichen Branch bringen
+Wenn das Feature fertig ist, bringst du es in deinen Namens-Branch zurück.
+
+```bash
+# Zurück zu deinem Branch wechseln
+git checkout <DeinName>
+
+# Feature reinholen (mergen)
+git merge features/mein-neues-feature
+
+# Auf den Server laden
+git push origin <DeinName>
+```
+
+---
+
+## Schritt 5: In den Main bringen (Der Abschluss)
+Regelmäßig (z.B. wenn das Feature stabil läuft) muss dein Namens-Branch in den `main` gemerged werden.
+Dies machen wir idealerweise über einen **Pull Request** in GitHub oder (nach Absprache im Team) lokal.
+
+
+## 🔄 Tägliche Routine: Update vom Main (Drift verhindern!)
+
+Da wir zu fünft arbeiten, ändert sich der `main` Branch ständig. Damit dein persönlicher Branch nicht veraltet ("abweicht") und du später keine riesigen Merge-Konflikte lösen musst, musst du die Änderungen der anderen regelmäßig in deinen Branch holen.
+
+```bash
+# 1. Sicherstellen, dass du auf deinem persönlichen Branch bist
+git checkout <DeinName>
+
+# 2. Den neuesten Stand vom Server (GitHub) herunterladen (noch nicht mergen)
+git fetch origin
+
+# 3. Den main vom Server in deinen lokalen Branch mergen
+git merge origin/main
+```
+---
+
+## 📚 Glossar: Local vs. Origin
+Damit wir alle vom Gleichen reden:
+
+### 💻 Local (Lokal)
+Das ist dein Laptop. Änderungen, die du hier machst (speichern, committen), sieht erst mal nur DU. Wenn dein Laptop kaputt geht, sind "lokale" Änderungen weg.
+* **Befehle:** `git commit`, `git checkout`, `.\build.ps1`
+
+### ☁️ Origin (Remote/Server)
+Das ist GitHub (die Cloud). Erst wenn du etwas hierhin "pushst", können es die anderen (Simon, Moritz, etc.) sehen.
+* `git push`: Schiebt deine lokalen Änderungen auf den Server (Origin).
+* `git pull`: Holt Änderungen vom Server auf deinen Laptop (Local).
+* `git fetch`: Schaut auf dem Server nach Neuerungen, lädt sie aber noch nicht in deine Dateien.
+
+---
+
+## ⚠️ Goldene Regeln
+1. **Klein anfangen:** Entwickle kleine Bausteine und merge sie oft in deinen persönlichen Branch.
+2. **Verantwortung:** Du bist für deinen Namens-Branch verantwortlich. Halte ihn sauber und synchronisiere ihn oft mit main.
+3. **Build Skript:** Vergiss nicht `.\build.ps1` auszuführen, sonst wunderst du dich, warum CATIA deine Änderungen nicht anzeigt.
+4. **Hierarchie:**
+   > `main` <--- `DeinName` <--- `features/...`
+   
