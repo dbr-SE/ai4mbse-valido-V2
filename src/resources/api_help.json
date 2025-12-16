@@ -1,0 +1,6 @@
+{
+  "title": "Anleitung: Umgebungsvariable setzen",
+  "intro": "Der GEMINI_API_KEY fehlt. Damit das Plugin funktioniert, muss dieser Key auf Betriebssystem-Ebene hinterlegt werden.",
+  "windows": "1. Drücke die Windows-Taste und suche nach 'Umgebungsvariablen'.\n2. Wähle 'Systemumgebungsvariablen bearbeiten'.\n3. Klicke auf 'Umgebungsvariablen...'.\n4. Klicke im Bereich 'Benutzervariablen' auf 'Neu'.\n5. Name: GEMINI_API_KEY\n6. Wert: Dein_Key_Hier\n7. Alles mit OK bestätigen und IntelliJ neu starten.",
+  "mac": "1. Öffne das Terminal.\n2. Finde heraus, welche Shell du nutzt (meist zsh oder bash).\n3. Bearbeite die Config: 'nano ~/.zshrc' (oder ~/.bash_profile).\n4. Füge am Ende hinzu:\n   export GEMINI_API_KEY=\"Dein_Key_Hier\"\n5. Speichern mit Ctrl+O -> Enter -> Ctrl+X.\n6. IntelliJ komplett beenden (Cmd+Q) und neu starten."
+}

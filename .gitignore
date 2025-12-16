@@ -1,0 +1,36 @@
+### IntelliJ IDEA (Entwicklungsumgebung) ###
+.idea/
+*.iml
+out/
+
+### Maven (Build-Ordner) ###
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+
+### Catia Magic / Große Dateien (WICHTIG für <100MB) ###
+# Ignoriert den Ordner mit den riesigen Catia-JARs
+lib/
+
+# Ignoriert alle verpackten Dateien (verhindert versehentlichen Upload)
+*.jar
+*.zip
+*.war
+*.ear
+
+### Müll & Temporäre Dateien ###
+.vscode/
+setup_classpath.bat
+*.log
+*.tmp
+
+### Betriebssystem ###
+.DS_Store
+Thumbs.db
+
+### Sicherheit (Niemals hochladen!) ###
+api_key.txt

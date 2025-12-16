@@ -1,0 +1,1 @@
+Die Regel muss aus einer Folge von Zahlen die fehlende finden
