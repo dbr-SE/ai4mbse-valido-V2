@@ -30,7 +30,7 @@ Das Plug-in ist aktuell für den **Demo-Modus** konfiguriert:
 
 Um das Projekt in IntelliJ IDEA zu starten:
 
-1.  Stellen Sie sicher, dass **Java 11 SDK** konfiguriert ist.
+1.  Stellen Sie sicher, dass **Java 17 SDK** konfiguriert ist.
 2.  Führen Sie die Klasse `com.ai4mbse.app.App` aus.
 3.  Klicken Sie im UI auf **"Muda Detection"**, um den Analyse-Workflow zu simulieren.
 
