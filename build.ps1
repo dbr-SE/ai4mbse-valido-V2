@@ -8,11 +8,11 @@
 $programDir = "C:\Program Files\Magic Systems of Systems Architect"
 
 # B) Wo soll das Plugin installiert werden (AppData)?
-$pluginInstallBase = "C:\Users\dbrpr\AppData\Local\.magic.systems.of.systems.architect\2024x\plugins"
+$pluginInstallBase = "C:\Users\micha\AppData\Local\.magic.systems.of.systems.architect\2024x\plugins"
 $pluginInstallDir  = "$pluginInstallBase\AI4MBSE_valido"
 
 # C) Java Tools
-$javaPath  = "C:\Users\dbrpr\.jdks\ms-17.0.17"
+$javaPath  = "C:\Users\micha\.jdks\ms-17.0.17"
 $jarTool   = "$javaPath\bin\jar.exe"
 $javacTool = "$javaPath\bin\javac.exe"
 
