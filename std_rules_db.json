@@ -22,6 +22,7 @@
   },
   {
     "regeltitel": "Formale Qualität",
+
     "elementtypen": "Requirement",
     "pakete": "Alle",
     "ziel": "Qualitätsprüfung nach ISO/IEC/IEEE 29148:2018.",
