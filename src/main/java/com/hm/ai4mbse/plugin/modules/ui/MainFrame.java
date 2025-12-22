@@ -12,6 +12,7 @@ import javax.swing.border.LineBorder;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableCellRenderer;
 import java.awt.*;
+import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.HashMap;
@@ -99,6 +100,8 @@ public class MainFrame extends JFrame {
 
         for (FormFieldDefinition fieldDef : formStructure) {
             gbc.gridx = 0; gbc.gridy = gridY; gbc.weightx = 0.3;
+            // Hier Vergrößerung des Eingabefeldes für das "Ziel" (späteres Feature)
+            // Aktuell Standard
             formContent.add(new JLabel(fieldDef.getLabel()), gbc);
 
             JComponent input;
@@ -116,7 +119,6 @@ public class MainFrame extends JFrame {
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton btnClear = new JButton("Neu / Leeren");
         JButton btnSave = new JButton("KI-Generieren & Speichern");
-        // HIER AUCH: Standard-Farben lassen für bessere Lesbarkeit
         btnSave.setFont(new Font("Segoe UI", Font.BOLD, 12));
 
         buttonPanel.add(btnClear);
@@ -247,16 +249,20 @@ public class MainFrame extends JFrame {
     }
 
     // =================================================================================
-    //       TAB 2: MODELL REVIEWEN (FIXED COLORS)
+    //       TAB 2: MODELL REVIEWEN (MIT US-BUTTONS)
     // =================================================================================
 
     private JPanel createReviewPanel() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
         panel.setBorder(new EmptyBorder(10, 10, 10, 10));
 
-        // 1. Control Leiste oben
+        // --- OBERER BEREICH (Container für Konfiguration & US-Buttons) ---
+        JPanel topContainer = new JPanel();
+        topContainer.setLayout(new BoxLayout(topContainer, BoxLayout.Y_AXIS));
+
+        // 1. Control Leiste (Manuelle Auswahl)
         JPanel controlPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
-        controlPanel.setBorder(BorderFactory.createTitledBorder("Prüfungskonfiguration"));
+        controlPanel.setBorder(BorderFactory.createTitledBorder("Manuelle Prüfungskonfiguration"));
 
         JLabel lblSelect = new JLabel("Regel auswählen:");
 
@@ -274,7 +280,6 @@ public class MainFrame extends JFrame {
             }
         });
 
-        // Start Button - FIX: Keine Custom Colors, damit es auf macOS lesbar bleibt
         JButton btnStart = new JButton("▶ Prüfung starten");
         btnStart.setFont(new Font("Segoe UI", Font.BOLD, 12));
         btnStart.setPreferredSize(new Dimension(150, 30));
@@ -283,7 +288,37 @@ public class MainFrame extends JFrame {
         controlPanel.add(ruleSelector);
         controlPanel.add(btnStart);
 
-        // 2. Tabelle für Ergebnisse
+        // 2. User Story Schnellzugriff (NEU HINZUGEFÜGT)
+        JPanel usPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        usPanel.setBorder(BorderFactory.createTitledBorder("Schnellzugriff: Standard-Prüfungen"));
+
+        JButton btnUS01 = new JButton("Trace-Plausibilität");
+        JButton btnUS02 = new JButton("Muda-Detection");
+        JButton btnUS03 = new JButton("Lücken-Analyse");
+        JButton btnUS04 = new JButton("Formale Qualität");
+
+        // Helper für Button-Events
+        ActionListener usAction = e -> {
+            String command = e.getActionCommand(); // Liest den Command (Titel)
+            runReviewByTitle(command);
+        };
+
+        // Die Commands müssen exakt den Titeln in der JSON entsprechen
+        btnUS01.setActionCommand("Trace-Plausibilität"); btnUS01.addActionListener(usAction);
+        btnUS02.setActionCommand("Muda-Detection");      btnUS02.addActionListener(usAction);
+        btnUS03.setActionCommand("Lücken-Analyse");      btnUS03.addActionListener(usAction);
+        btnUS04.setActionCommand("Formale Qualität");    btnUS04.addActionListener(usAction);
+
+        usPanel.add(btnUS01);
+        usPanel.add(btnUS02);
+        usPanel.add(btnUS03);
+        usPanel.add(btnUS04);
+
+        topContainer.add(controlPanel);
+        topContainer.add(Box.createVerticalStrut(5));
+        topContainer.add(usPanel);
+
+        // --- TABELLE ---
         String[] columns = {"Betroffenes Element", "Problem / Vorschlag", "Konfidenz", "Hilfe (?)"};
         reviewTableModel = new DefaultTableModel(columns, 0) {
             public boolean isCellEditable(int row, int column) { return column == 3; }
@@ -299,37 +334,62 @@ public class MainFrame extends JFrame {
         table.getColumn("Hilfe (?)").setCellRenderer(new ButtonRenderer());
         table.getColumn("Hilfe (?)").setCellEditor(new ButtonEditor(new JCheckBox()));
 
-        panel.add(controlPanel, BorderLayout.NORTH);
+        panel.add(topContainer, BorderLayout.NORTH);
         panel.add(new JScrollPane(table), BorderLayout.CENTER);
 
-        // 3. Logik
+        // Logik für den Start-Button (Manuell)
         btnStart.addActionListener(e -> {
             RuleDefinition selectedRule = (RuleDefinition) ruleSelector.getSelectedItem();
             if (selectedRule == null) {
                 JOptionPane.showMessageDialog(this, "Bitte wähle erst eine Regel aus.");
                 return;
             }
-
-            reviewTableModel.setRowCount(0);
-
-            controller.handleRunReviewFromTab(selectedRule, results -> {
-                for (ReviewDisplayItem item : results) {
-                    reviewTableModel.addRow(new Object[]{
-                            item.getElementColumn(),
-                            item.getProblemColumn(),
-                            item.getConfidenceColumn(),
-                            item.getExplanationText()
-                    });
-                }
-                if (results.isEmpty()) {
-                    JOptionPane.showMessageDialog(this, "Keine Verstöße gefunden (oder Parsing fehlgeschlagen).");
-                }
-            });
+            executeReview(selectedRule);
         });
 
         refreshRuleDropdown();
 
         return panel;
+    }
+
+    /**
+     * Führt eine Review-Regel anhand ihres Titels aus (für die US-Buttons).
+     */
+    private void runReviewByTitle(String ruleTitle) {
+        List<RuleDefinition> rules = controller.handleLoadRulesRequest();
+        RuleDefinition foundRule = null;
+        for (RuleDefinition r : rules) {
+            if (ruleTitle.equalsIgnoreCase(r.get("regeltitel"))) {
+                foundRule = r;
+                break;
+            }
+        }
+
+        if (foundRule != null) {
+            executeReview(foundRule);
+        } else {
+            JOptionPane.showMessageDialog(this, "Die Regel '" + ruleTitle + "' wurde in der Datenbank nicht gefunden.\nBitte lege sie unter 'Regeln verwalten' an (oder prüfe rules_db.json).");
+        }
+    }
+
+    /**
+     * Zentralisierte Methode zum Ausführen der Prüfung
+     */
+    private void executeReview(RuleDefinition rule) {
+        reviewTableModel.setRowCount(0);
+        controller.handleRunReviewFromTab(rule, results -> {
+            for (ReviewDisplayItem item : results) {
+                reviewTableModel.addRow(new Object[]{
+                        item.getElementColumn(),
+                        item.getProblemColumn(),
+                        item.getConfidenceColumn(),
+                        item.getExplanationText()
+                });
+            }
+            if (results.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Keine Verstöße gefunden (oder Parsing fehlgeschlagen).");
+            }
+        });
     }
 
     private void refreshRuleDropdown() {
