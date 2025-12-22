@@ -1,49 +1,34 @@
 #!/bin/bash
 
 # =============================================================================
-# BUILD SKRIPT FÜR AI4MBSE PLUGIN (MACOS)
+# BUILD SKRIPT FÜR AI4MBSE PLUGIN (MACOS) - OPTIMIERT
 # =============================================================================
 
-# Farben für Output
+# Farben
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# 1. PFADE KONFIGURIEREN (Deine Antworten)
-# Der Hauptordner
+# 1. PFADE
 PROGRAM_DIR="/Applications/Magic Systems of Systems Architect"
-
-# Der Ordner mit den Programm-Bibliotheken (md.jar)
 LIB_DIR="$PROGRAM_DIR/lib"
-
-# Wo soll das Plugin hin? (Direkt in den App-Ordner)
-# Wir hängen den Plugin-Namen an, damit ein sauberer Unterordner entsteht
 PLUGIN_BASE_DIR="/Applications/Magic Systems of Systems Architect/plugins"
 PLUGIN_INSTALL_DIR="$PLUGIN_BASE_DIR/AI4MBSE_valido"
 
-# Java Tools (Systemstandard nutzen)
 JAR_TOOL="jar"
 JAVAC_TOOL="javac"
 
 # 2. CHECKS
 echo "--- Starte Checks ---"
-
-# Lib-Ordner prüfen
 if [ ! -f "$LIB_DIR/md.jar" ]; then
     echo -e "${RED}FEHLER: 'md.jar' nicht gefunden in: $LIB_DIR${NC}"
     exit 1
 else
-    echo -e "${GREEN}Bibliotheken gefunden: $LIB_DIR${NC}"
+    echo -e "${GREEN}Bibliotheken gefunden.${NC}"
 fi
 
-# Java prüfen
-if ! command -v $JAVAC_TOOL &> /dev/null; then
-    echo -e "${RED}Java Compiler nicht gefunden!${NC}"
-    exit 1
-fi
-
-# 3. PROJEKT-PFADE SETZEN
+# 3. PROJEKT-PFADE
 PROJECT_ROOT=$(pwd)
 SRC_FOLDER="$PROJECT_ROOT/src/main/java"
 RESOURCE_FOLDER="$PROJECT_ROOT/src/main/resources"
@@ -60,11 +45,9 @@ mkdir -p "$PROJECT_ROOT/target"
 
 # 5. KOMPILIEREN
 echo "--- Kompiliere ---"
+# Classpath inklusive MagicDraw Libs UND lokaler Libs
+CLASSPATH="$LIB_DIR/*:$LIB_DIR/bundles/*:$LIB_DIR/plugins/*:$LOCAL_LIB_FOLDER/*"
 
-# Classpath (Doppelpunkt statt Semikolon auf Mac!)
-CLASSPATH="$LIB_DIR/*:$LOCAL_LIB_FOLDER/*"
-
-# Java Dateien finden
 find "$SRC_FOLDER" -name "*.java" > "$SOURCES_LIST"
 
 if [ ! -s "$SOURCES_LIST" ]; then
@@ -72,7 +55,6 @@ if [ ! -s "$SOURCES_LIST" ]; then
     exit 1
 fi
 
-# Compiler starten
 $JAVAC_TOOL -encoding UTF-8 -cp "$CLASSPATH" -d "$BUILD_FOLDER" @"$SOURCES_LIST"
 
 if [ $? -ne 0 ]; then
@@ -80,9 +62,18 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 6. RESSOURCEN KOPIEREN
+# 6. RESSOURCEN KOPIEREN (HIER WAR DAS PROBLEM EVENTUELL)
+echo "--- Kopiere Ressourcen ---"
 if [ -d "$RESOURCE_FOLDER" ]; then
+    # Kopiere alles rekursiv
     cp -R "$RESOURCE_FOLDER/"* "$BUILD_FOLDER/"
+
+    # CHECK: Wurde die DB kopiert?
+    if [ -f "$BUILD_FOLDER/std_rules_db.json" ]; then
+        echo -e "${GREEN}OK: std_rules_db.json erfolgreich kopiert.${NC}"
+    else
+        echo -e "${RED}WARNUNG: std_rules_db.json wurde NICHT kopiert!${NC}"
+    fi
 fi
 
 # 7. JAR PACKEN
@@ -97,27 +88,30 @@ echo -e "${GREEN}Build erfolgreich: $OUTPUT_JAR${NC}"
 
 # 8. INSTALLIEREN
 echo "--- Installiere Plugin ---"
-echo "Ziel: $PLUGIN_INSTALL_DIR"
 
-# Da wir in /Applications schreiben, brauchen wir oft 'sudo'.
-# Wir versuchen es erst normal, wenn das fehlschlägt, fragen wir nach sudo.
-
+# Sudo Logik
 if [ ! -w "$PLUGIN_BASE_DIR" ]; then
-    echo -e "${CYAN}HINWEIS: Der Zielordner ist schreibgeschützt. Ich benötige dein Passwort (sudo).${NC}"
+    echo -e "${CYAN}Passwort für Installation erforderlich (sudo)...${NC}"
     USE_SUDO="sudo"
 else
     USE_SUDO=""
 fi
 
-# Ordner erstellen
 $USE_SUDO mkdir -p "$PLUGIN_INSTALL_DIR"
-
-# JAR kopieren
 $USE_SUDO cp -f "$OUTPUT_JAR" "$PLUGIN_INSTALL_DIR"
 
-# plugin.xml kopieren (falls vorhanden)
+# WICHTIG: Auch die JSONs müssen ggf. im Plugin-Ordner liegen,
+# falls sie nicht im JAR gefunden werden (Sicherheitsnetz)
+if [ -f "$RESOURCE_FOLDER/std_rules_db.json" ]; then
+   $USE_SUDO cp "$RESOURCE_FOLDER/std_rules_db.json" "$PLUGIN_INSTALL_DIR/"
+fi
+if [ -f "$RESOURCE_FOLDER/rules_db.json" ]; then
+   $USE_SUDO cp "$RESOURCE_FOLDER/rules_db.json" "$PLUGIN_INSTALL_DIR/"
+fi
+
+# plugin.xml
 if [ -f "$RESOURCE_FOLDER/plugin.xml" ]; then
     $USE_SUDO cp -f "$RESOURCE_FOLDER/plugin.xml" "$PLUGIN_INSTALL_DIR"
 fi
 
-echo -e "${GREEN}Installation fertig! Bitte MagicDraw/Cameo neu starten.${NC}"
+echo -e "${GREEN}Installation fertig! Bitte MagicDraw neu starten.${NC}"

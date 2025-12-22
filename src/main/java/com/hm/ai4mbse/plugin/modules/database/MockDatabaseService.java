@@ -2,34 +2,39 @@ package com.hm.ai4mbse.plugin.modules.database;
 
 import com.hm.ai4mbse.plugin.interfaces.DatabaseService;
 import com.hm.ai4mbse.plugin.model.RuleDefinition;
+
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Simulierte Datenbank-Implementierung.
- * Daten werden temporär in einer Liste gehalten, um die Datenbank zu simulieren.
+ * Ein Dummy-Service für Tests ohne echte Datenbank.
  */
 public class MockDatabaseService implements DatabaseService {
 
-    private List<RuleDefinition> internalStorage;
-
-    public MockDatabaseService() {
-        this.internalStorage = new ArrayList<>();
-        // Beispielwerte werden für Testzwecke generiert.
-        this.internalStorage.add(new RuleDefinition("System Context", "Block", "Keine Zyklen erlaubt"));
-        this.internalStorage.add(new RuleDefinition("Logical", "Interface", "Ports müssen typisiert sein"));
+    @Override
+    public List<RuleDefinition> loadRules() {
+        // Dummy-Liste zurückgeben
+        List<RuleDefinition> list = new ArrayList<>();
+        RuleDefinition r = new RuleDefinition();
+        r.put("regeltitel", "Mock Regel 1");
+        r.put("ziel", "Test");
+        list.add(r);
+        return list;
     }
 
     @Override
-    public List<RuleDefinition> loadAllRules() {
-        // Eine Kopie der Liste wird zurückgegeben.
-        return new ArrayList<>(internalStorage);
+    public List<RuleDefinition> loadStandardRules() {
+        // Leere Liste oder Dummys für Standard-Regeln
+        return new ArrayList<>();
     }
 
     @Override
     public void saveRule(RuleDefinition rule) {
-        // Die Regel wird zur Liste hinzugefügt.
-        this.internalStorage.add(rule);
-        System.out.println("LOG [Database]: Rule saved: " + rule.toString());
+        System.out.println("[MockDB] Speichere Regel: " + rule.get("regeltitel"));
+    }
+
+    @Override
+    public void deleteRule(RuleDefinition rule) {
+        System.out.println("[MockDB] Lösche Regel: " + rule.get("regeltitel"));
     }
 }

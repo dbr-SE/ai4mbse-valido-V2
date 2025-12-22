@@ -1,43 +1,102 @@
 package com.hm.ai4mbse.plugin.modules.database;
 
+import com.hm.ai4mbse.plugin.interfaces.DatabaseService;
 import com.hm.ai4mbse.plugin.model.RuleDefinition;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class JsonDatabaseService {
+public class JsonDatabaseService implements DatabaseService {
 
     private static final String DB_FILE = "rules_db.json";
+    private static final String STD_DB_FILE = "std_rules_db.json";
 
-    public JsonDatabaseService() {}
+    public JsonDatabaseService() {
+        // Init: Sicherstellen, dass die Dateien existieren (aus Resources kopieren)
+        ensureFileExists(DB_FILE);
+        ensureFileExists(STD_DB_FILE);
+    }
 
+    private void ensureFileExists(String fileName) {
+        Path path = Path.of(fileName);
+        if (!Files.exists(path)) {
+            System.out.println("[DB] Datei fehlt lokal: " + fileName + ". Versuche aus Resources zu kopieren...");
+
+            // Versuch 1: Normaler Classloader
+            InputStream in = getClass().getClassLoader().getResourceAsStream(fileName);
+
+            // Versuch 2: Root-Pfad (wichtig für JARs)
+            if (in == null) {
+                in = getClass().getResourceAsStream("/" + fileName);
+            }
+
+            if (in != null) {
+                try {
+                    Files.copy(in, path, StandardCopyOption.REPLACE_EXISTING);
+                    System.out.println("[DB] Erfolgreich kopiert: " + fileName);
+                    in.close();
+                } catch (IOException e) {
+                    System.err.println("[DB] Fehler beim Kopieren von " + fileName);
+                    e.printStackTrace();
+                }
+            } else {
+                System.err.println("[DB] WARNUNG: Resource '" + fileName + "' nicht im Classpath/JAR gefunden!");
+            }
+        }
+    }
+
+    // --- Interface Methoden ---
+
+    @Override
     public void saveRule(RuleDefinition newRule) {
-        List<RuleDefinition> rules = loadAllRules();
+        List<RuleDefinition> rules = loadRulesFromFile(DB_FILE);
         String newTitle = newRule.get("regeltitel");
-        // Update: Altes löschen, neues hinzufügen
         rules.removeIf(r -> r.get("regeltitel").equals(newTitle));
         rules.add(newRule);
-        writeRulesToFile(rules);
+        writeRulesToFile(DB_FILE, rules);
     }
 
+    @Override
     public void deleteRule(RuleDefinition ruleToDelete) {
-        List<RuleDefinition> rules = loadAllRules();
+        List<RuleDefinition> rules = loadRulesFromFile(DB_FILE);
         String titleToDelete = ruleToDelete.get("regeltitel");
         boolean removed = rules.removeIf(r -> r.get("regeltitel").equals(titleToDelete));
-        if (removed) writeRulesToFile(rules);
+        if (removed) {
+            writeRulesToFile(DB_FILE, rules);
+        }
     }
 
-    public List<RuleDefinition> loadAllRules() {
-        if (!Files.exists(Path.of(DB_FILE))) return new ArrayList<>();
+    @Override
+    public List<RuleDefinition> loadRules() {
+        return loadRulesFromFile(DB_FILE);
+    }
+
+    @Override
+    public List<RuleDefinition> loadStandardRules() {
+        return loadRulesFromFile(STD_DB_FILE);
+    }
+
+    // --- Interne Helper für Datei-Zugriff ---
+
+    private List<RuleDefinition> loadRulesFromFile(String fileName) {
+        Path path = Path.of(fileName);
+        if (!Files.exists(path)) {
+            // Versuch erneutes Kopieren falls gelöscht
+            ensureFileExists(fileName);
+            if (!Files.exists(path)) return new ArrayList<>();
+        }
+
         try {
-            String jsonContent = Files.readString(Path.of(DB_FILE), StandardCharsets.UTF_8);
+            String jsonContent = Files.readString(path, StandardCharsets.UTF_8);
             return parseJsonToRules(jsonContent);
         } catch (IOException e) {
             e.printStackTrace();
@@ -45,11 +104,13 @@ public class JsonDatabaseService {
         }
     }
 
-    private void writeRulesToFile(List<RuleDefinition> rules) {
+    private void writeRulesToFile(String fileName, List<RuleDefinition> rules) {
         String jsonString = convertRulesToJson(rules);
         try {
-            Files.writeString(Path.of(DB_FILE), jsonString, StandardCharsets.UTF_8);
-        } catch (IOException e) { e.printStackTrace(); }
+            Files.writeString(Path.of(fileName), jsonString, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     // --- ROBUSTE JSON ENGINE OHNE LIB ---
@@ -84,21 +145,15 @@ public class JsonDatabaseService {
         if (inner.endsWith("]")) inner = inner.substring(0, inner.length() - 1);
         if (inner.isBlank()) return list;
 
-        // Split nach Objekten }, {
         String[] objects = inner.split("\\}\\s*,\\s*\\{");
 
         for (String objStr : objects) {
             RuleDefinition rule = new RuleDefinition();
-            // Verbesserter Regex: DOTALL Mode (?s) erlaubt Zeilenumbrüche im Value
             Pattern pattern = Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"(.*?)\"", Pattern.DOTALL);
             Matcher matcher = pattern.matcher(objStr);
 
             while (matcher.find()) {
                 String key = matcher.group(1);
-                // Da Regex gierig sein kann, müssen wir aufpassen, dass wir nicht zu viel matchen.
-                // Aber bei einfacher Struktur "key":"value" geht das meist.
-                // Besserer Schutz gegen End-Quote im String:
-                // Wir nehmen den Value und un-escapen ihn
                 String value = unescapeJson(matcher.group(2));
                 rule.put(key, value);
             }

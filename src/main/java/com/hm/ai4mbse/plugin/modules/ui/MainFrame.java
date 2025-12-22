@@ -92,39 +92,83 @@ public class MainFrame extends JFrame {
         JPanel formContent = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.insets = new Insets(5, 5, 5, 5);
         gbc.weightx = 1.0;
 
         dynamicInputs.clear();
         int gridY = 0;
 
         for (FormFieldDefinition fieldDef : formStructure) {
-            gbc.gridx = 0; gbc.gridy = gridY; gbc.weightx = 0.3;
-            // Hier Vergrößerung des Eingabefeldes für das "Ziel" (späteres Feature)
-            // Aktuell Standard
+            // --- ZEILE A: Label und Input Feld ---
+
+            // 1. Label (Links)
+            gbc.gridx = 0;
+            gbc.gridy = gridY;
+            gbc.weightx = 0.3;
+            gbc.anchor = GridBagConstraints.NORTHWEST;
+            gbc.insets = new Insets(10, 5, 0, 5);
             formContent.add(new JLabel(fieldDef.getLabel()), gbc);
 
-            JComponent input;
-            if (fieldDef.getType() == FormFieldDefinition.FieldType.DROPDOWN) {
-                input = new JComboBox<>(fieldDef.getOptions());
-            } else {
-                input = new JTextField(20);
+            // 2. Input Component (Rechts)
+            JComponent inputComponent;
+            JComponent visualComponent;
+
+            if (isTargetField(fieldDef.getId())) {
+                // Großes Textfeld für "Ziel"
+                JTextArea area = new JTextArea(10, 20);
+                area.setLineWrap(true);
+                area.setWrapStyleWord(true);
+                // Font auf SansSerif für bessere Mac-Kompatibilität
+                area.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
+                area.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY));
+
+                inputComponent = area;
+                visualComponent = new JScrollPane(area);
             }
-            gbc.gridx = 1; gbc.weightx = 0.7;
-            formContent.add(input, gbc);
-            dynamicInputs.put(fieldDef.getId(), input);
+            else if (fieldDef.getType() == FormFieldDefinition.FieldType.DROPDOWN) {
+                JComboBox<String> box = new JComboBox<>(fieldDef.getOptions());
+                inputComponent = box;
+                visualComponent = box;
+            } else {
+                JTextField field = new JTextField(20);
+                inputComponent = field;
+                visualComponent = field;
+            }
+
+            gbc.gridx = 1;
+            gbc.weightx = 0.7;
+            gbc.insets = new Insets(10, 5, 2, 5);
+            formContent.add(visualComponent, gbc);
+
+            dynamicInputs.put(fieldDef.getId(), inputComponent);
+
+            // --- ZEILE B: Beispieltext (unter dem Input) ---
+            gridY++;
+            gbc.gridx = 1;
+            gbc.gridy = gridY;
+            gbc.weightx = 0.7;
+            gbc.insets = new Insets(0, 5, 5, 5);
+
+            JLabel lblExample = new JLabel(getExampleForField(fieldDef.getId()));
+            lblExample.setFont(new Font(Font.SANS_SERIF, Font.ITALIC, 11));
+            lblExample.setForeground(Color.GRAY);
+            formContent.add(lblExample, gbc);
+
             gridY++;
         }
 
+        // --- BUTTONS (Ganz unten) ---
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton btnClear = new JButton("Neu / Leeren");
         JButton btnSave = new JButton("KI-Generieren & Speichern");
-        btnSave.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        btnSave.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
 
         buttonPanel.add(btnClear);
         buttonPanel.add(btnSave);
 
-        gbc.gridx = 0; gbc.gridy = gridY; gbc.gridwidth = 2;
+        gbc.gridx = 0;
+        gbc.gridy = gridY;
+        gbc.gridwidth = 2;
+        gbc.insets = new Insets(20, 5, 5, 5);
         formContent.add(buttonPanel, gbc);
 
         btnSave.addActionListener(e -> {
@@ -133,8 +177,11 @@ public class MainFrame extends JFrame {
                 String key = entry.getKey();
                 String value = "";
                 JComponent comp = entry.getValue();
+
                 if (comp instanceof JTextField) value = ((JTextField) comp).getText();
+                else if (comp instanceof JTextArea) value = ((JTextArea) comp).getText();
                 else if (comp instanceof JComboBox) value = (String) ((JComboBox<?>) comp).getSelectedItem();
+
                 newRule.put(key, value);
             }
             controller.handleSaveRuleRequest(newRule);
@@ -149,10 +196,30 @@ public class MainFrame extends JFrame {
         return wrapper;
     }
 
+    private boolean isTargetField(String id) {
+        String lower = id.toLowerCase();
+        return lower.contains("ziel") || lower.contains("target") || lower.contains("scope");
+    }
+
+    private String getExampleForField(String fieldId) {
+        String id = fieldId.toLowerCase();
+        if (id.contains("titel") || id.contains("name")) return "Bsp: 'Keine zyklischen Abhängigkeiten' oder 'Trace-Konsistenz'";
+        if (id.contains("beschr") || id.contains("logik")) return "Bsp: 'Prüft, ob Element A direkt mit Element B verknüpft ist.'";
+        if (id.contains("ziel") || id.contains("target")) return "Bsp: 'Ich möchte sicherstellen, dass alle Requirements eine Trace-Beziehung haben.'";
+        if (id.contains("context") || id.contains("kontext") || id.contains("paket")) return "Bsp: 'System Context', 'Logical Architecture', 'Pkg_Requirements'";
+        if (id.contains("element") || id.contains("typ")) return "Bsp: 'Class', 'Block', 'Requirement', 'Interface'";
+        if (id.contains("persona") || id.contains("rolle")) return "Bsp: 'Software Architekt', 'Safety Manager', 'Reviewer'";
+        if (id.contains("ton") || id.contains("style")) return "Bsp: 'Sachlich', 'Streng', 'Konstruktiv', 'Kritisch'";
+        if (id.contains("strenge") || id.contains("level")) return "Bsp: 'Hoch', 'Niedrig', 'Standard'";
+        if (id.contains("norm") || id.contains("iso")) return "Bsp: 'ISO 26262', 'ASPICE'";
+        if (id.contains("beispiel") && id.contains("korrekt")) return "Bsp: 'ID: 123 -> Status: Validiert'";
+        if (id.contains("beispiel") && id.contains("fehler")) return "Bsp: 'ID: 123 -> Status: Offen (Fehler)'";
+        return " ";
+    }
+
     private void refreshRuleList() {
         rulesListContainer.removeAll();
         List<RuleDefinition> rules = controller.handleLoadRulesRequest();
-
         for (RuleDefinition rule : rules) {
             rulesListContainer.add(new RuleRowPanel(rule));
             rulesListContainer.add(Box.createVerticalStrut(2));
@@ -176,29 +243,24 @@ public class MainFrame extends JFrame {
             setMaximumSize(new Dimension(Integer.MAX_VALUE, 55));
 
             JLabel titleLabel = new JLabel(rule.get("regeltitel"));
-            titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+            titleLabel.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
             add(titleLabel, BorderLayout.CENTER);
 
             buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
             buttonPanel.setOpaque(false);
             buttonPanel.setVisible(false);
 
-            // Buttons
-            JButton btnEdit = createTextBtn("Edit", "Regel bearbeiten", Color.DARK_GRAY);
+            // Icons
+            JButton btnEdit = createIconBtn("✏", "Regel bearbeiten", Color.DARK_GRAY);
             btnEdit.addActionListener(e -> loadRuleIntoForm(rule));
 
-            JButton btnReq = createTextBtn("Prompt", "Gesendeter Prompt ansehen", Color.BLUE);
+            JButton btnReq = createIconBtn("✨➡", "Gesendeter Prompt ansehen", Color.BLUE);
             btnReq.addActionListener(e -> showTextDialog("An Gemini gesendet", rule.get("generated_prompt_request")));
 
-            JButton btnRes = createTextBtn("Result", "Erhaltene KI-Antwort ansehen", new Color(0, 100, 150));
+            JButton btnRes = createIconBtn("✨⬅", "Erhaltene KI-Antwort ansehen", new Color(0, 100, 150));
             btnRes.addActionListener(e -> showTextDialog("Von Gemini empfangen", rule.get("technical_prompt")));
 
-            JButton btnPlay = createTextBtn("Run", "Regel ausführen", new Color(0, 150, 0));
-            btnPlay.setFont(new Font("Segoe UI", Font.BOLD, 11));
-            btnPlay.addActionListener(e -> controller.handleRunSingleRuleRequest(rule));
-
-            JButton btnDel = createTextBtn("X", "Löschen", Color.RED);
-            btnDel.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            JButton btnDel = createIconBtn("🗑", "Löschen", Color.RED);
             btnDel.addActionListener(e -> {
                 int confirm = JOptionPane.showConfirmDialog(MainFrame.this, "Regel wirklich löschen?", "Löschen", JOptionPane.YES_NO_OPTION);
                 if (confirm == JOptionPane.YES_OPTION) {
@@ -210,7 +272,6 @@ public class MainFrame extends JFrame {
             buttonPanel.add(btnEdit);
             buttonPanel.add(btnReq);
             buttonPanel.add(btnRes);
-            buttonPanel.add(btnPlay);
             buttonPanel.add(btnDel);
 
             add(buttonPanel, BorderLayout.EAST);
@@ -234,11 +295,12 @@ public class MainFrame extends JFrame {
             buttonPanel.addMouseListener(ma);
         }
 
-        private JButton createTextBtn(String text, String tooltip, Color fgColor) {
+        private JButton createIconBtn(String text, String tooltip, Color fgColor) {
             JButton b = new JButton(text);
             b.setToolTipText(tooltip);
             b.setForeground(fgColor);
-            b.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+            // Segoe UI Symbol für Windows Emojis, sonst Fallback auf Standard
+            b.setFont(new Font("Segoe UI Symbol", Font.PLAIN, 16));
             b.setMargin(new Insets(2, 6, 2, 6));
             b.setFocusPainted(false);
             b.setContentAreaFilled(true);
@@ -280,17 +342,28 @@ public class MainFrame extends JFrame {
             }
         });
 
+        // FIX 1: MIT Icon (Play), SansSerif Font
         JButton btnStart = new JButton("▶ Prüfung starten");
-        btnStart.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        btnStart.setPreferredSize(new Dimension(150, 30));
+        btnStart.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+        btnStart.setPreferredSize(new Dimension(200, 30));
 
         controlPanel.add(lblSelect);
         controlPanel.add(ruleSelector);
         controlPanel.add(btnStart);
-// Button: API Key manuell
-        JButton btnApiKey = new JButton("🔑 API Key");
+
+        // FIX 2: OHNE Icon, nur Text "API Key", SansSerif Font
+        JButton btnApiKey = new JButton("API Key");
         btnApiKey.setToolTipText("API Key manuell eingeben (für diese Sitzung)");
-        btnApiKey.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+
+        btnApiKey.setBackground(Color.WHITE);
+        btnApiKey.setForeground(Color.BLACK);
+        btnApiKey.setContentAreaFilled(true);
+        btnApiKey.setFocusPainted(false);
+        btnApiKey.setBorder(new LineBorder(Color.LIGHT_GRAY, 1));
+
+        btnApiKey.setPreferredSize(new Dimension(100, 30));
+        btnApiKey.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+
         btnApiKey.addActionListener(e -> {
             String input = JOptionPane.showInputDialog(this, "Bitte Gemini API Key eingeben:", "API Key Setup", JOptionPane.QUESTION_MESSAGE);
             if (input != null && !input.isBlank()) {
@@ -300,7 +373,7 @@ public class MainFrame extends JFrame {
         controlPanel.add(Box.createHorizontalStrut(20)); // Abstand
         controlPanel.add(btnApiKey);
 
-        // 2. User Story Schnellzugriff (NEU HINZUGEFÜGT)
+        // 2. User Story Schnellzugriff
         JPanel usPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
         usPanel.setBorder(BorderFactory.createTitledBorder("Schnellzugriff: Standard-Prüfungen"));
 
@@ -309,13 +382,11 @@ public class MainFrame extends JFrame {
         JButton btnUS03 = new JButton("Lücken-Analyse");
         JButton btnUS04 = new JButton("Formale Qualität");
 
-        // Helper für Button-Events
         ActionListener usAction = e -> {
-            String command = e.getActionCommand(); // Liest den Command (Titel)
+            String command = e.getActionCommand();
             runReviewByTitle(command);
         };
 
-        // Die Commands müssen exakt den Titeln in der JSON entsprechen
         btnUS01.setActionCommand("Trace-Plausibilität"); btnUS01.addActionListener(usAction);
         btnUS02.setActionCommand("Muda-Detection");      btnUS02.addActionListener(usAction);
         btnUS03.setActionCommand("Lücken-Analyse");      btnUS03.addActionListener(usAction);
@@ -349,7 +420,6 @@ public class MainFrame extends JFrame {
         panel.add(topContainer, BorderLayout.NORTH);
         panel.add(new JScrollPane(table), BorderLayout.CENTER);
 
-        // Logik für den Start-Button (Manuell)
         btnStart.addActionListener(e -> {
             RuleDefinition selectedRule = (RuleDefinition) ruleSelector.getSelectedItem();
             if (selectedRule == null) {
@@ -364,11 +434,8 @@ public class MainFrame extends JFrame {
         return panel;
     }
 
-    /**
-     * Führt eine Review-Regel anhand ihres Titels aus (für die US-Buttons).
-     */
     private void runReviewByTitle(String ruleTitle) {
-        List<RuleDefinition> rules = controller.handleLoadRulesRequest();
+        List<RuleDefinition> rules = controller.handleLoadStandardRulesRequest();
         RuleDefinition foundRule = null;
         for (RuleDefinition r : rules) {
             if (ruleTitle.equalsIgnoreCase(r.get("regeltitel"))) {
@@ -376,17 +443,13 @@ public class MainFrame extends JFrame {
                 break;
             }
         }
-
         if (foundRule != null) {
             executeReview(foundRule);
         } else {
-            JOptionPane.showMessageDialog(this, "Die Regel '" + ruleTitle + "' wurde in der Datenbank nicht gefunden.\nBitte lege sie unter 'Regeln verwalten' an (oder prüfe rules_db.json).");
+            JOptionPane.showMessageDialog(this, "Standard-Regel '" + ruleTitle + "' nicht gefunden.\n(Bitte std_rules_db.json prüfen).");
         }
     }
 
-    /**
-     * Zentralisierte Methode zum Ausführen der Prüfung
-     */
     private void executeReview(RuleDefinition rule) {
         reviewTableModel.setRowCount(0);
         controller.handleRunReviewFromTab(rule, results -> {
@@ -413,10 +476,6 @@ public class MainFrame extends JFrame {
         }
     }
 
-    // =================================================================================
-    //       HELPER METHODEN
-    // =================================================================================
-
     private void showTextDialog(String title, String content) {
         JTextArea area = new JTextArea(content != null && !content.isEmpty() ? content : "[Keine Daten gespeichert]");
         area.setLineWrap(true);
@@ -432,7 +491,9 @@ public class MainFrame extends JFrame {
             String fieldId = entry.getKey();
             JComponent comp = entry.getValue();
             String value = rule.get(fieldId);
+
             if (comp instanceof JTextField) ((JTextField) comp).setText(value);
+            else if (comp instanceof JTextArea) ((JTextArea) comp).setText(value);
             else if (comp instanceof JComboBox) ((JComboBox<?>) comp).setSelectedItem(value);
         }
     }
@@ -440,6 +501,7 @@ public class MainFrame extends JFrame {
     private void resetInputs() {
         for (JComponent comp : dynamicInputs.values()) {
             if (comp instanceof JTextField) ((JTextField) comp).setText("");
+            else if (comp instanceof JTextArea) ((JTextArea) comp).setText("");
             else if (comp instanceof JComboBox && ((JComboBox<?>)comp).getItemCount() > 0)
                 ((JComboBox<?>) comp).setSelectedIndex(0);
         }

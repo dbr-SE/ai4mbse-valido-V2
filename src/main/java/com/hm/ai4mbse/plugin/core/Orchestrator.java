@@ -30,10 +30,6 @@ import java.util.regex.Pattern;
 
 /**
  * Der "Super-Orchestrator".
- * Vereint:
- * 1. Echte MagicDraw-Daten (Auto-Export)
- * 2. Moderne UX (Lade-Animationen, API-Check)
- * 3. Asynchrone Verarbeitung für flüssiges UI
  */
 public class Orchestrator implements UiController {
 
@@ -43,46 +39,36 @@ public class Orchestrator implements UiController {
     private final Create_Rule createRuleLogic;
     private final Run_Review runReviewLogic;
 
-    // Cache für den echten XML-Export
     private File autoExportedFile;
 
     public Orchestrator() {
-        // 1. Sicherheits-Check: API Key prüfen
+        this.kiCommunication = new KI_Communication(); // Früh initialisieren für Key-Setzung
+
+        // 1. Sicherheits-Check: API Key prüfen (mit Dialog-Loop)
         if (!ensureApiKeyExists()) {
-            System.out.println("Orchestrator: Kein API Key gefunden. Abbruch.");
-            // Wir beenden hier nicht hart (System.exit), damit MagicDraw nicht abstürzt,
-            // aber die Services werden evtl. nicht funktionieren.
+            System.out.println("Orchestrator: Kein API Key. Start abgebrochen.");
+            // Wir lassen den Konstruktor durchlaufen, aber das Plugin ist "stumm".
         }
 
         this.database = new JsonDatabaseService();
         this.visualization = new VisualizationService();
-        this.kiCommunication = new KI_Communication();
         this.createRuleLogic = new Create_Rule();
         this.runReviewLogic = new Run_Review(createRuleLogic, kiCommunication);
 
         System.out.println("Orchestrator gestartet und bereit.");
     }
 
-    // Für lokale Tests ohne MagicDraw (Startet sich selbst)
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new MainFrame(new Orchestrator()).setVisible(true));
     }
 
-    // =================================================================
-    //               TEIL 1: DATEN-FLUSS & UI START
-    // =================================================================
+    // ... (Teil 1 & 2 unverändert) ...
 
-    /**
-     * Empfängt den Auto-Export vom PluginLifecycle.
-     */
     public void startWithFile(File exportFile) {
         this.autoExportedFile = exportFile;
         System.out.println("Orchestrator: Auto-Export empfangen: " + exportFile.getAbsolutePath());
     }
 
-    /**
-     * Öffnet das Hauptfenster.
-     */
     public void showMainWindow() {
         if (autoExportedFile == null) {
             JOptionPane.showMessageDialog(null,
@@ -90,17 +76,12 @@ public class Orchestrator implements UiController {
                     "AI4MBSE Assistant", JOptionPane.WARNING_MESSAGE);
             return;
         }
-
         SwingUtilities.invokeLater(() -> {
             MainFrame frame = new MainFrame(this);
             frame.setVisible(true);
             frame.toFront();
         });
     }
-
-    // =================================================================
-    //               TEIL 2: REGEL VERWALTUNG
-    // =================================================================
 
     @Override
     public List<FormFieldDefinition> requestRuleFormStructure() {
@@ -118,7 +99,6 @@ public class Orchestrator implements UiController {
 
     @Override
     public void handleSaveRuleRequest(RuleDefinition ruleInput) {
-        // Auch hier nutzen wir jetzt den Lade-Screen!
         executeAsyncWithLoading("Regel wird generiert...", () -> {
             try {
                 RuleCreationConfig config = new RuleCreationConfig();
@@ -144,15 +124,10 @@ public class Orchestrator implements UiController {
                 finalRule.put("technical_prompt", technicalRule);
 
                 database.saveRule(finalRule);
-
-                SwingUtilities.invokeLater(() ->
-                        JOptionPane.showMessageDialog(null, "Regel erfolgreich generiert und gespeichert!")
-                );
+                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(null, "Regel erfolgreich generiert und gespeichert!"));
             } catch (Exception e) {
                 e.printStackTrace();
-                SwingUtilities.invokeLater(() ->
-                        JOptionPane.showMessageDialog(null, "Fehler: " + e.getMessage())
-                );
+                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(null, "Fehler: " + e.getMessage()));
             }
         });
     }
@@ -160,28 +135,22 @@ public class Orchestrator implements UiController {
     @Override
     public void handleDeleteRuleRequest(RuleDefinition rule) {
         database.deleteRule(rule);
-        System.out.println("Regel gelöscht: " + rule.get("regeltitel"));
     }
 
     @Override
     public List<RuleDefinition> handleLoadRulesRequest() {
-        return database.loadAllRules();
+        return database.loadRules();
     }
 
-    // =================================================================
-    //               TEIL 3: REVIEW LOGIK (Das Herzstück)
-    // =================================================================
+    @Override
+    public List<RuleDefinition> handleLoadStandardRulesRequest() {
+        return database.loadStandardRules();
+    }
 
-    // A) Einzelne Regel aus Liste (Play Button)
     @Override
     public void handleRunSingleRuleRequest(RuleDefinition rule) {
         String title = rule.get("regeltitel");
-        // Wir nutzen die gleiche Logik wie im Tab, aber zeigen das Popup selbst an
         handleRunReviewFromTab(rule, (items) -> {
-            // Callback wenn fertig:
-            // Da wir hier nicht den Roh-Text haben, bauen wir eine einfache Anzeige oder
-            // wir müssten handleRunReviewFromTab umbauen, um mehr Daten zurückzugeben.
-            // Für Konsistenz zeigen wir hier eine einfache Zusammenfassung.
             StringBuilder sb = new StringBuilder();
             sb.append("Review-Ergebnis für: ").append(title).append("\n\n");
             if (items.isEmpty()) {
@@ -198,7 +167,6 @@ public class Orchestrator implements UiController {
         });
     }
 
-    // B) Review Tab (Dropdown)
     @Override
     public void handleRunReviewFromTab(RuleDefinition rule, Consumer<List<ReviewDisplayItem>> resultCallback) {
         String technicalRule = rule.get("technical_prompt");
@@ -207,44 +175,43 @@ public class Orchestrator implements UiController {
             return;
         }
 
-        // UX: Lade-Screen anzeigen
         executeAsyncWithLoading("Modellprüfung läuft...", () -> {
             try {
-                // 1. ECHTE DATEN HOLEN (Auto-Export)
                 File xmlFile = this.autoExportedFile;
-
-                // Fallback: Falls null (z.B. Projektwechsel), neu exportieren
                 if (xmlFile == null || !xmlFile.exists()) {
                     System.out.println("Orchestrator: Export nicht gefunden, starte Neu-Export...");
-                    Project project = Application.getInstance().getProject();
-                    xmlFile = ModelExportHelper.createXmlSnapshot(project);
-                    this.autoExportedFile = xmlFile;
+                    try {
+                        Project project = Application.getInstance().getProject();
+                        xmlFile = ModelExportHelper.createXmlSnapshot(project);
+                        this.autoExportedFile = xmlFile;
+                    } catch (Throwable t) {
+                        System.out.println("Orchestrator: MagicDraw API nicht verfügbar (Lokaler Test?)");
+                        if (new File("src/resources/sample_project.xml").exists()) {
+                            xmlFile = new File("src/resources/sample_project.xml");
+                        }
+                    }
                 }
 
                 if (xmlFile == null) {
-                    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(null, "Fehler: Modell-Export fehlgeschlagen!"));
-                    return;
+                    System.out.println("Warnung: Kein XML-File verfügbar.");
                 }
 
-                // 2. Regel speichern
                 Path tempRuleFile = Files.createTempFile("active_rule_", ".txt");
                 Files.writeString(tempRuleFile, technicalRule);
 
-                // 3. Config erstellen (MIT ECHTEM FILE!)
                 ReviewStartConfig config = new ReviewStartConfig();
                 config.setUseCase("Review starten");
                 config.setRuleFile(tempRuleFile.toAbsolutePath().toString());
-                config.setProjectXml(xmlFile.getAbsolutePath()); // <--- HIER IST DER ECHTE PFAD
+                String xmlPath = (xmlFile != null) ? xmlFile.getAbsolutePath() : "dummy_path.xml";
+                config.setProjectXml(xmlPath);
                 config.setSystemElementScope("Aktuelles Modell");
                 config.getParameters().put("runId", "run_" + System.currentTimeMillis());
 
                 Path resourcesDir = Path.of("src/main/resources");
                 Path dummyJsonPath = resourcesDir.resolve("dummy_run_config.json");
 
-                // 4. KI Ausführen
                 runReviewLogic.startReview(config, dummyJsonPath);
 
-                // 5. Ergebnis lesen
                 String runId = config.getParameters().get("runId");
                 Path resultFile = resourcesDir.resolve("review_result_" + runId + ".txt");
 
@@ -254,9 +221,9 @@ public class Orchestrator implements UiController {
                     List<ReviewIssue> issues = visualization.parseTextReportToIssues(reportText);
                     displayItems = visualization.prepareDisplayData(issues);
                     Files.deleteIfExists(tempRuleFile);
+                    Files.deleteIfExists(resultFile);
                 }
 
-                // 6. Callback ans UI (Muss im Swing Thread passieren)
                 List<ReviewDisplayItem> finalItems = displayItems;
                 SwingUtilities.invokeLater(() -> resultCallback.accept(finalItems));
 
@@ -269,10 +236,6 @@ public class Orchestrator implements UiController {
 
     @Override
     public List<ReviewDisplayItem> handleDisplayRequest(String reviewType) { return new ArrayList<>(); }
-
-    // =================================================================
-    //               HELPER: LOADING SCREEN & UX
-    // =================================================================
 
     private void executeAsyncWithLoading(String title, Runnable task) {
         JDialog loadingDialog = new JDialog((Frame)null, title, true);
@@ -325,7 +288,6 @@ public class Orchestrator implements UiController {
         loadingDialog.setVisible(true);
     }
 
-    // Innere Klasse für die Animation
     private static class CircleLoader extends JPanel {
         private int angle = 0;
         private Timer animationTimer;
@@ -351,25 +313,45 @@ public class Orchestrator implements UiController {
     }
 
     // =================================================================
-    //               API KEY HELPER
+    //               API KEY HELPER (ANGPEASST)
     // =================================================================
 
     private boolean ensureApiKeyExists() {
         while (!hasValidKey()) {
-            Object[] options = {"Erneut prüfen", "Hilfe (?)", "Ignorieren (Test)"};
+            // Änderung: Ignorieren Button entfernt, Manuelle Eingabe hinzugefügt
+            Object[] options = {"Erneut prüfen", "Hilfe (?)", "Manuell eingeben"};
             int choice = JOptionPane.showOptionDialog(null,
                     "Der GEMINI_API_KEY wurde nicht gefunden!\nDas Plugin kann ohne Key keine Anfragen senden.", "Konfiguration fehlt",
                     JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.ERROR_MESSAGE, null, options, options[0]);
-            if (choice == 0) continue;
-            else if (choice == 1) showApiHelp();
-            else return false; // User bricht ab oder ignoriert
+
+            if (choice == 0) {
+                // Erneut prüfen loop
+                continue;
+            } else if (choice == 1) {
+                showApiHelp();
+            } else if (choice == 2) {
+                // Manuelle Eingabe
+                String input = JOptionPane.showInputDialog(null, "Bitte API Key hier einfügen:", "Manuelle Eingabe", JOptionPane.PLAIN_MESSAGE);
+                if (input != null && !input.isBlank()) {
+                    handleManualApiKeySubmit(input);
+                    return true; // Key gesetzt, weiter gehts
+                }
+            } else {
+                return false; // Fenster geschlossen
+            }
         }
         return true;
     }
 
     private boolean hasValidKey() {
+        // 1. Prüfe Session Key (wurde manuell gesetzt?)
+        if (kiCommunication.hasSessionKey()) return true;
+
+        // 2. Prüfe Umgebungsvariable
         String envKey = System.getenv("GEMINI_API_KEY");
         if (envKey != null && !envKey.isBlank()) return true;
+
+        // 3. Prüfe Datei
         Path keyFile = Path.of("api_key.txt");
         if (Files.exists(keyFile)) {
             try { return !Files.readString(keyFile).trim().isEmpty(); } catch (IOException e) { return false; }
@@ -382,7 +364,6 @@ public class Orchestrator implements UiController {
             Path helpFile = Path.of("src/main/resources/api_help.json");
             String json = Files.exists(helpFile) ? Files.readString(helpFile, StandardCharsets.UTF_8) : "Hilfe-Datei nicht gefunden.";
             String windowsText = extractJsonValue(json, "windows");
-
             JTextArea textArea = new JTextArea("=== ANLEITUNG ===\n" + windowsText);
             textArea.setEditable(false);
             JOptionPane.showMessageDialog(null, new JScrollPane(textArea), "Hilfe", JOptionPane.INFORMATION_MESSAGE);
@@ -394,11 +375,12 @@ public class Orchestrator implements UiController {
         Matcher matcher = pattern.matcher(json);
         return matcher.find() ? matcher.group(1).replace("\\n", "\n") : "-";
     }
+
     @Override
     public void handleManualApiKeySubmit(String key) {
         if (key != null && !key.isBlank()) {
             kiCommunication.setSessionApiKey(key);
-            JOptionPane.showMessageDialog(null, "API-Key wurde für diese Sitzung temporär gespeichert.", "Erfolg", JOptionPane.INFORMATION_MESSAGE);
+            // Kein Popup nötig beim Start, der Loop prüft es dann einfach als "valid"
         }
     }
 }

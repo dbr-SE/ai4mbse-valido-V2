@@ -16,23 +16,28 @@ import java.util.Optional;
  * - Text-only Requests
  * - Text + File Requests (XML Upload)
  * - Zero-Dependency (Kein org.json nötig)
- * - API Key aus Env, Datei oder manueller Session-Eingabe
+ * - API Key aus Session (Manuell), Env oder api_key.txt
  */
 public class KI_Communication {
 
     private static final String GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
     private static final String GEMINI_ENDPOINT = GEMINI_BASE_URL + "/v1beta/models/gemini-2.5-flash:generateContent";
 
-    // Hier wird der temporäre API-Key für die aktuelle Sitzung gespeichert
-    private String sessionApiKey;
+    // NEU: Speichert den manuell eingegebenen Key im RAM
+    private String sessionApiKey = null;
 
     /**
-     * Setzt einen API-Key nur für die aktuelle Laufzeit (Session).
-     * Dies ermöglicht die manuelle Eingabe durch den Benutzer über das UI.
-     * @param key Der manuell eingegebene API-Schlüssel.
+     * Setzt den API Key für die aktuelle Laufzeit manuell.
      */
     public void setSessionApiKey(String key) {
         this.sessionApiKey = key;
+    }
+
+    /**
+     * Prüft, ob ein manueller Session-Key gesetzt ist.
+     */
+    public boolean hasSessionKey() {
+        return this.sessionApiKey != null && !this.sessionApiKey.isBlank();
     }
 
     /**
@@ -164,18 +169,21 @@ public class KI_Communication {
     // ------- Hilfsfunktionen (Zero-Dependency) -------
 
     /**
-     * Holt Key aus Session, Env oder Datei.
+     * Holt Key:
+     * 1. Session Key (Manuell eingegeben)
+     * 2. Environment Variable
+     * 3. api_key.txt Datei
      */
     private String getApiKey() throws IOException {
-        // 1. Priorität: Session Key (Manuelle Eingabe) wird geprüft
-        if (sessionApiKey != null && !sessionApiKey.isBlank()) {
+        // 1. Session Key (RAM)
+        if (hasSessionKey()) {
             return sessionApiKey;
         }
 
-        // 2. Priorität: Umgebungsvariable wird ausgelesen
+        // 2. Env
         String apiKey = System.getenv("GEMINI_API_KEY");
 
-        // 3. Fallback: Datei wird geprüft, falls Variable leer ist
+        // 3. Fallback Datei
         if (apiKey == null || apiKey.isBlank()) {
             Path keyFile = Path.of("api_key.txt");
             if (Files.exists(keyFile)) {
@@ -184,7 +192,7 @@ public class KI_Communication {
         }
 
         if (apiKey == null || apiKey.isBlank()) {
-            throw new IllegalStateException("Kein API Key gefunden! (ENV oder api_key.txt prüfen oder manuell eingeben)");
+            throw new IllegalStateException("Kein API Key gefunden! (Weder Manuell, ENV noch api_key.txt)");
         }
         return apiKey;
     }
