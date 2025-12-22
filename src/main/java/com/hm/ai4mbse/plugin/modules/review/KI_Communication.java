@@ -16,12 +16,24 @@ import java.util.Optional;
  * - Text-only Requests
  * - Text + File Requests (XML Upload)
  * - Zero-Dependency (Kein org.json nötig)
- * - API Key aus Env oder api_key.txt
+ * - API Key aus Env, Datei oder manueller Session-Eingabe
  */
 public class KI_Communication {
 
     private static final String GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
     private static final String GEMINI_ENDPOINT = GEMINI_BASE_URL + "/v1beta/models/gemini-2.5-flash:generateContent";
+
+    // Hier wird der temporäre API-Key für die aktuelle Sitzung gespeichert
+    private String sessionApiKey;
+
+    /**
+     * Setzt einen API-Key nur für die aktuelle Laufzeit (Session).
+     * Dies ermöglicht die manuelle Eingabe durch den Benutzer über das UI.
+     * @param key Der manuell eingegebene API-Schlüssel.
+     */
+    public void setSessionApiKey(String key) {
+        this.sessionApiKey = key;
+    }
 
     /**
      * Text-only-Version.
@@ -152,13 +164,18 @@ public class KI_Communication {
     // ------- Hilfsfunktionen (Zero-Dependency) -------
 
     /**
-     * Holt Key aus Env oder Datei.
+     * Holt Key aus Session, Env oder Datei.
      */
     private String getApiKey() throws IOException {
-        // 1. Env
+        // 1. Priorität: Session Key (Manuelle Eingabe) wird geprüft
+        if (sessionApiKey != null && !sessionApiKey.isBlank()) {
+            return sessionApiKey;
+        }
+
+        // 2. Priorität: Umgebungsvariable wird ausgelesen
         String apiKey = System.getenv("GEMINI_API_KEY");
 
-        // 2. Fallback Datei
+        // 3. Fallback: Datei wird geprüft, falls Variable leer ist
         if (apiKey == null || apiKey.isBlank()) {
             Path keyFile = Path.of("api_key.txt");
             if (Files.exists(keyFile)) {
@@ -167,7 +184,7 @@ public class KI_Communication {
         }
 
         if (apiKey == null || apiKey.isBlank()) {
-            throw new IllegalStateException("Kein API Key gefunden! (ENV oder api_key.txt prüfen)");
+            throw new IllegalStateException("Kein API Key gefunden! (ENV oder api_key.txt prüfen oder manuell eingeben)");
         }
         return apiKey;
     }

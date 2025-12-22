@@ -394,4 +394,11 @@ public class Orchestrator implements UiController {
         Matcher matcher = pattern.matcher(json);
         return matcher.find() ? matcher.group(1).replace("\\n", "\n") : "-";
     }
+    @Override
+    public void handleManualApiKeySubmit(String key) {
+        if (key != null && !key.isBlank()) {
+            kiCommunication.setSessionApiKey(key);
+            JOptionPane.showMessageDialog(null, "API-Key wurde für diese Sitzung temporär gespeichert.", "Erfolg", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
 }

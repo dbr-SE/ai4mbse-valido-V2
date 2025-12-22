@@ -287,6 +287,18 @@ public class MainFrame extends JFrame {
         controlPanel.add(lblSelect);
         controlPanel.add(ruleSelector);
         controlPanel.add(btnStart);
+// Button: API Key manuell
+        JButton btnApiKey = new JButton("🔑 API Key");
+        btnApiKey.setToolTipText("API Key manuell eingeben (für diese Sitzung)");
+        btnApiKey.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        btnApiKey.addActionListener(e -> {
+            String input = JOptionPane.showInputDialog(this, "Bitte Gemini API Key eingeben:", "API Key Setup", JOptionPane.QUESTION_MESSAGE);
+            if (input != null && !input.isBlank()) {
+                controller.handleManualApiKeySubmit(input);
+            }
+        });
+        controlPanel.add(Box.createHorizontalStrut(20)); // Abstand
+        controlPanel.add(btnApiKey);
 
         // 2. User Story Schnellzugriff (NEU HINZUGEFÜGT)
         JPanel usPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));

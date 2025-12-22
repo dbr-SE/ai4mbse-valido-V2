@@ -24,4 +24,7 @@ public interface UiController {
 
     // Einzelne Regel ausführen (Play-Button)
     void handleRunSingleRuleRequest(RuleDefinition rule);
+    // API Key manuell setzen
+    void handleManualApiKeySubmit(String key);
+
 }
