@@ -7,6 +7,7 @@ import java.awt.*;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
+import java.util.Objects;
 
 public class InstallerMain extends JFrame {
 
@@ -37,16 +38,20 @@ public class InstallerMain extends JFrame {
 
     private void initUI() {
         setTitle(APP_NAME);
-        setSize(750, 550);
+        setSize(750, 600); // Etwas höher für das Logo
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
-        // Logo laden
+        // 1. Fenster-Icon setzen (Taskleiste / Dock)
         try {
-            ImageIcon icon = new ImageIcon(getClass().getResource("/images/logo.png"));
+            ImageIcon icon = new ImageIcon(Objects.requireNonNull(getClass().getResource("/images/logo.png")));
             setIconImage(icon.getImage());
+            // Für Mac Dock Icon (funktioniert ab Java 9+)
+            if (isMac) {
+                Taskbar.getTaskbar().setIconImage(icon.getImage());
+            }
         } catch (Exception e) {
-            System.out.println("Logo nicht gefunden.");
+            System.out.println("Logo für Taskleiste nicht gefunden.");
         }
 
         cardLayout = new CardLayout();
@@ -62,9 +67,33 @@ public class InstallerMain extends JFrame {
         add(mainPanel);
     }
 
-    // --- SCREEN 1: WILLKOMMEN ---
+    // --- SCREEN 1: WILLKOMMEN (MIT LOGO) ---
     private JPanel createWelcomePanel() {
-        JPanel p = new JPanel(new BorderLayout());
+        JPanel p = new JPanel(new BorderLayout(0, 20)); // Abstand zwischen Elementen
+
+        // A) Logo Bereich
+        JLabel logoLabel = new JLabel();
+        logoLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        try {
+            ImageIcon originalIcon = new ImageIcon(Objects.requireNonNull(getClass().getResource("/images/logo.png")));
+            // Skalieren auf max 200px Breite/Höhe, aber Verhältnis beibehalten
+            Image img = originalIcon.getImage();
+            int width = 200;
+            int height = (int) ((double) img.getHeight(null) / img.getWidth(null) * width);
+
+            // Falls das Bild sehr hoch ist, begrenzen wir die Höhe
+            if (height > 200) {
+                height = 200;
+                width = (int) ((double) img.getWidth(null) / img.getHeight(null) * height);
+            }
+
+            Image scaledImg = img.getScaledInstance(width, height, Image.SCALE_SMOOTH);
+            logoLabel.setIcon(new ImageIcon(scaledImg));
+        } catch (Exception e) {
+            logoLabel.setText("[LOGO]"); // Fallback
+        }
+
+        // B) Text Bereich
         JLabel t = new JLabel("Willkommen beim Installer für VALIDO", SwingConstants.CENTER);
         t.setFont(new Font("SansSerif", Font.BOLD, 22));
 
@@ -73,15 +102,25 @@ public class InstallerMain extends JFrame {
                 "Bitte stellen Sie sicher, dass Catia Magic geschlossen ist.</center></html>", SwingConstants.CENTER);
         i.setFont(new Font("SansSerif", Font.PLAIN, 14));
 
+        // Layout zusammenbauen
+        JPanel centerPanel = new JPanel();
+        centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.Y_AXIS));
+
+        logoLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        t.setAlignmentX(Component.CENTER_ALIGNMENT);
+        i.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        centerPanel.add(logoLabel);
+        centerPanel.add(Box.createVerticalStrut(20)); // Abstand
+        centerPanel.add(t);
+        centerPanel.add(Box.createVerticalStrut(10)); // Abstand
+        centerPanel.add(i);
+
         JButton b = new JButton("Installation starten ➔");
         b.setFont(new Font("SansSerif", Font.BOLD, 14));
         b.addActionListener(e -> cardLayout.show(mainPanel, "PATHS"));
 
-        JPanel center = new JPanel(new BorderLayout());
-        center.add(t, BorderLayout.NORTH);
-        center.add(i, BorderLayout.CENTER);
-
-        p.add(center, BorderLayout.CENTER);
+        p.add(centerPanel, BorderLayout.CENTER);
         p.add(b, BorderLayout.SOUTH);
         return p;
     }
@@ -208,9 +247,15 @@ public class InstallerMain extends JFrame {
                     if(isWindows) {
                         new ProcessBuilder("setx", "GEMINI_API_KEY", apiKey).start().waitFor();
                     } else {
+                        // Mac/Linux Env var persist is tricky without restart/sourcing.
+                        // We write to rc files but current session might not see it immediately in other terminal tabs
+                        // but Catia launched via Finder usually picks up launchctl setenv
                         File rc = new File(System.getProperty("user.home"), ".zshrc");
                         Files.writeString(rc.toPath(), "\nexport GEMINI_API_KEY=\""+apiKey+"\"\n", StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-                        new ProcessBuilder("launchctl", "setenv", "GEMINI_API_KEY", apiKey).start().waitFor();
+
+                        try {
+                            new ProcessBuilder("launchctl", "setenv", "GEMINI_API_KEY", apiKey).start().waitFor();
+                        } catch(Exception ex) { /* Ignore if launchctl fails */ }
                     }
                     log("API Key gesetzt.");
                 }
@@ -230,7 +275,7 @@ public class InstallerMain extends JFrame {
                 copyRes("ai4mbse-plugin.jar", new File(plugins, "ai4mbse-plugin.jar"));
                 copyRes("plugin.xml", new File(plugins, "plugin.xml"));
 
-                // 4. Config schreiben (Damit das Plugin den Export-Pfad kennt)
+                // 4. Config schreiben
                 createPluginConfig(xmlExportDir);
 
                 log("--- Installation erfolgreich! ---");
