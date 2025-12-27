@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugin
+        id="com.hm.ai4mbse.plugin"
+        name="AI4MBSE Assistant"
+        version="1.0"
+        provider-name="HM"
+        class="com.hm.ai4mbse.plugin.catiamsosa.PluginLifecycle">
+
+    <requires>
+        <api version="1.0"/>
+    </requires>
+
+    <runtime>
+        <library name="ai4mbse-plugin.jar"/>
+    </runtime>
+</plugin>
