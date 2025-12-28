@@ -207,13 +207,10 @@ public class InstallerMain extends JFrame {
         });
     }
 
-    private void createPluginConfig(File exportDir) {
+    private void createPluginConfig(File configDir, File exportDir) {
         try {
-            File configDir = new File(System.getProperty("user.home"), ".ai4mbse");
-            if (!configDir.exists()) configDir.mkdirs();
-
             File configFile = new File(configDir, "config.properties");
-            String content = "export_path=" + exportDir.getAbsolutePath().replace("\\", "/"); // Fix für Windows Pfade in Properties
+            String content = "export_path=" + exportDir.getAbsolutePath().replace("\\", "/");
             Files.writeString(configFile.toPath(), content, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
             log("Konfiguration gespeichert: " + configFile.getAbsolutePath());
         } catch (Exception e) {
@@ -221,13 +218,12 @@ public class InstallerMain extends JFrame {
         }
     }
 
-    // --- WICHTIG: HIER IST DER FIX ---
     private void startInstallation() {
         new Thread(() -> {
             try {
                 log("--- Start Installation ---");
 
-                // 1. API Key
+                // 1. API Key Setup
                 if(apiKey != null && !apiKey.isBlank() && chkPersistKey.isSelected()) {
                     log("Setze API Key...");
                     if(isWindows) {
@@ -242,57 +238,69 @@ public class InstallerMain extends JFrame {
                     log("API Key gesetzt.");
                 }
 
-                // 2. Plugins Ordner finden (ROBUSTE LOGIK)
+                // 2. Plugins Ordner für Catia vorbereiten
                 File pluginsBase;
-
-                // Check 1: Hat der Nutzer direkt den "plugins" Ordner ausgewählt?
                 if (catiaInstallDir.getName().equalsIgnoreCase("plugins")) {
                     pluginsBase = catiaInstallDir;
                 } else {
-                    // Check 2: Ist es ein Mac Bundle?
                     if (isMac && catiaInstallDir.getName().endsWith(".app")) {
                         File c = new File(catiaInstallDir, "Contents/plugins");
                         File j = new File(catiaInstallDir, "Contents/Resources/Java/plugins");
                         if (c.exists()) pluginsBase = c;
                         else if (j.exists()) pluginsBase = j;
-                        else pluginsBase = new File(catiaInstallDir, "plugins"); // Fallback
+                        else pluginsBase = new File(catiaInstallDir, "plugins");
                     } else {
-                        // Check 3: Standard Windows/Linux Ordnerstruktur
                         pluginsBase = new File(catiaInstallDir, "plugins");
                     }
                 }
 
-                // Falls der Ordner "plugins" gar nicht existiert, erstellen wir ihn
-                if (!pluginsBase.exists()) {
-                    log("Erstelle 'plugins' Verzeichnis...");
-                    pluginsBase.mkdirs();
-                }
+                if (!pluginsBase.exists()) pluginsBase.mkdirs();
 
-                // --- FIX: Sicherstellen, dass wir nicht plugins/plugins haben ---
-                // Falls der gefundene Ordner nicht "plugins" heißt (sondern z.B. der Installationsordner war),
-                // haben wir oben ja schon "new File(..., 'plugins')" gemacht.
-                // Das passt also.
-
-                // Jetzt erstellen wir UNSEREN Unterordner
                 File myPluginDir = new File(pluginsBase, "com.hm.ai4mbse");
-                if (!myPluginDir.exists()) {
-                    log("Erstelle Plugin-Unterordner: " + myPluginDir.getName());
-                    myPluginDir.mkdirs();
-                }
+                if (!myPluginDir.exists()) myPluginDir.mkdirs();
 
-                log("Zielverzeichnis: " + myPluginDir.getAbsolutePath());
+                log("Installiere Plugin in: " + myPluginDir.getAbsolutePath());
 
-                // 3. Kopieren
+                // 3. Plugin JARs kopieren
                 copyRes("ai4mbse-plugin.jar", new File(myPluginDir, "ai4mbse-plugin.jar"));
                 copyRes("plugin.xml", new File(myPluginDir, "plugin.xml"));
 
-                // 4. Config
-                createPluginConfig(xmlExportDir);
+                // --- FIX: USER CONFIG & DATENBANKEN ---
+                // Hier lösen wir das Schreibrechte-Problem:
+                // Alles, was veränderbar sein muss, kommt in User-Home/.ai4mbse
+
+                File userConfigDir = new File(System.getProperty("user.home"), ".ai4mbse");
+                if (!userConfigDir.exists()) {
+                    userConfigDir.mkdirs();
+                    log("User-Config Ordner erstellt: " + userConfigDir.getAbsolutePath());
+                }
+
+                // A) Standard-Regeln (immer überschreiben -> Update)
+                try {
+                    copyRes("std_rules_db.json", new File(userConfigDir, "std_rules_db.json"));
+                    log("Standard-Regeln installiert/aktualisiert (in User-Home).");
+                } catch (Exception e) {
+                    log("WARNUNG: std_rules_db.json fehlt im Installer!");
+                }
+
+                // B) User-Regeln (nur erstellen, wenn nicht da -> Safe Copy)
+                File userRules = new File(userConfigDir, "rules_db.json");
+                if (!userRules.exists()) {
+                    try {
+                        copyRes("rules_db.json", userRules);
+                        log("User-Datenbank initialisiert (in User-Home).");
+                    } catch (Exception e) {
+                        log("WARNUNG: rules_db.json fehlt im Installer!");
+                    }
+                }
+
+                // C) Config Datei
+                createPluginConfig(userConfigDir, xmlExportDir);
 
                 log("--- Installation erfolgreich! ---");
                 log("Bitte starten Sie Catia Magic neu.");
 
-                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(this, "Installation erfolgreich!\nDas Plugin ist nun einsatzbereit."));
+                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(this, "Installation erfolgreich!\nDas Plugin und die Datenbanken sind eingerichtet."));
 
             } catch(Exception e) {
                 log("FEHLER: " + e.getMessage());
