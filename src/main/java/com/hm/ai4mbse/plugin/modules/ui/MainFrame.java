@@ -353,7 +353,7 @@ public class MainFrame extends JFrame {
         controlPanel.add(btnStart);
 
         // FIX 2: OHNE Icon, nur Text "API Key", SansSerif Font
-        JButton btnApiKey = new JButton("API Key");
+        JButton btnApiKey = new JButton("API Key ändern");
         btnApiKey.setToolTipText("API Key manuell eingeben (für diese Sitzung)");
 
         btnApiKey.setBackground(Color.WHITE);
