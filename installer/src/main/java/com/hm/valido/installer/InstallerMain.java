@@ -38,27 +38,25 @@ public class InstallerMain extends JFrame {
 
     private void initUI() {
         setTitle(APP_NAME);
-        setSize(750, 600); // Etwas höher für das Logo
+        setSize(750, 600);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
-        // 1. Fenster-Icon setzen (Taskleiste / Dock)
+        // Icon setzen
         try {
             ImageIcon icon = new ImageIcon(Objects.requireNonNull(getClass().getResource("/images/logo.png")));
             setIconImage(icon.getImage());
-            // Für Mac Dock Icon (funktioniert ab Java 9+)
             if (isMac) {
                 Taskbar.getTaskbar().setIconImage(icon.getImage());
             }
         } catch (Exception e) {
-            System.out.println("Logo für Taskleiste nicht gefunden.");
+            System.out.println("Logo nicht gefunden.");
         }
 
         cardLayout = new CardLayout();
         mainPanel = new JPanel(cardLayout);
         mainPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
-        // Panels hinzufügen
         mainPanel.add(createWelcomePanel(), "WELCOME");
         mainPanel.add(createPathPanel(), "PATHS");
         mainPanel.add(createKeyPanel(), "APIKEY");
@@ -67,33 +65,29 @@ public class InstallerMain extends JFrame {
         add(mainPanel);
     }
 
-    // --- SCREEN 1: WILLKOMMEN (MIT LOGO) ---
-    private JPanel createWelcomePanel() {
-        JPanel p = new JPanel(new BorderLayout(0, 20)); // Abstand zwischen Elementen
+    // --- GUI PANELS ---
 
-        // A) Logo Bereich
+    private JPanel createWelcomePanel() {
+        JPanel p = new JPanel(new BorderLayout(0, 20));
+
+        // Logo
         JLabel logoLabel = new JLabel();
         logoLabel.setHorizontalAlignment(SwingConstants.CENTER);
         try {
             ImageIcon originalIcon = new ImageIcon(Objects.requireNonNull(getClass().getResource("/images/logo.png")));
-            // Skalieren auf max 200px Breite/Höhe, aber Verhältnis beibehalten
             Image img = originalIcon.getImage();
             int width = 200;
             int height = (int) ((double) img.getHeight(null) / img.getWidth(null) * width);
-
-            // Falls das Bild sehr hoch ist, begrenzen wir die Höhe
             if (height > 200) {
                 height = 200;
                 width = (int) ((double) img.getWidth(null) / img.getHeight(null) * height);
             }
-
             Image scaledImg = img.getScaledInstance(width, height, Image.SCALE_SMOOTH);
             logoLabel.setIcon(new ImageIcon(scaledImg));
         } catch (Exception e) {
-            logoLabel.setText("[LOGO]"); // Fallback
+            logoLabel.setText("[LOGO]");
         }
 
-        // B) Text Bereich
         JLabel t = new JLabel("Willkommen beim Installer für VALIDO", SwingConstants.CENTER);
         t.setFont(new Font("SansSerif", Font.BOLD, 22));
 
@@ -102,18 +96,16 @@ public class InstallerMain extends JFrame {
                 "Bitte stellen Sie sicher, dass Catia Magic geschlossen ist.</center></html>", SwingConstants.CENTER);
         i.setFont(new Font("SansSerif", Font.PLAIN, 14));
 
-        // Layout zusammenbauen
         JPanel centerPanel = new JPanel();
         centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.Y_AXIS));
-
         logoLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         t.setAlignmentX(Component.CENTER_ALIGNMENT);
         i.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         centerPanel.add(logoLabel);
-        centerPanel.add(Box.createVerticalStrut(20)); // Abstand
+        centerPanel.add(Box.createVerticalStrut(20));
         centerPanel.add(t);
-        centerPanel.add(Box.createVerticalStrut(10)); // Abstand
+        centerPanel.add(Box.createVerticalStrut(10));
         centerPanel.add(i);
 
         JButton b = new JButton("Installation starten ➔");
@@ -125,18 +117,15 @@ public class InstallerMain extends JFrame {
         return p;
     }
 
-    // --- SCREEN 2: PFADE ---
     private JPanel createPathPanel() {
         JPanel p = new JPanel(new GridBagLayout());
         GridBagConstraints g = new GridBagConstraints();
         g.insets = new Insets(5,5,5,5); g.fill = GridBagConstraints.HORIZONTAL;
 
-        // Catia Pfad
         g.gridx=0; g.gridy=0; g.gridwidth=2; p.add(new JLabel("1. Catia Magic Installationsordner:"), g);
         g.gridy++; g.gridwidth=1; g.weightx=1.0; txtCatiaPath = new JTextField(); p.add(txtCatiaPath, g);
         g.gridx=1; g.weightx=0.0; JButton b1 = new JButton("Suchen..."); b1.addActionListener(e -> chooseDir(txtCatiaPath)); p.add(b1, g);
 
-        // Export Pfad
         g.gridx=0; g.gridy++; g.gridwidth=2; g.weightx=0.0; p.add(new JLabel("2. Ordner für KI-Exporte (XML):"), g);
         g.gridy++; g.gridwidth=1; g.weightx=1.0; txtExportPath = new JTextField(); p.add(txtExportPath, g);
         g.gridx=1; g.weightx=0.0; JButton b2 = new JButton("Suchen..."); b2.addActionListener(e -> chooseDir(txtExportPath)); p.add(b2, g);
@@ -157,7 +146,6 @@ public class InstallerMain extends JFrame {
         return p;
     }
 
-    // --- SCREEN 3: API KEY ---
     private JPanel createKeyPanel() {
         JPanel p = new JPanel(new GridBagLayout());
         GridBagConstraints g = new GridBagConstraints();
@@ -178,7 +166,6 @@ public class InstallerMain extends JFrame {
         return p;
     }
 
-    // --- SCREEN 4: LOG ---
     private JPanel createInstallPanel() {
         JPanel p = new JPanel(new BorderLayout());
         p.add(new JLabel("Installation läuft...", SwingConstants.CENTER), BorderLayout.NORTH);
@@ -191,7 +178,7 @@ public class InstallerMain extends JFrame {
         return p;
     }
 
-    // --- HELPER & LOGIK ---
+    // --- LOGIC ---
 
     private void chooseDir(JTextField f) {
         JFileChooser c = new JFileChooser(); c.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
@@ -226,56 +213,80 @@ public class InstallerMain extends JFrame {
             if (!configDir.exists()) configDir.mkdirs();
 
             File configFile = new File(configDir, "config.properties");
-            String content = "export_path=" + exportDir.getAbsolutePath();
+            String content = "export_path=" + exportDir.getAbsolutePath().replace("\\", "/"); // Fix für Windows Pfade in Properties
             Files.writeString(configFile.toPath(), content, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-
             log("Konfiguration gespeichert: " + configFile.getAbsolutePath());
-            log("Ziel für Exporte: " + exportDir.getAbsolutePath());
         } catch (Exception e) {
             log("WARNUNG: Konnte Config nicht schreiben: " + e.getMessage());
         }
     }
 
+    // --- WICHTIG: HIER IST DER FIX ---
     private void startInstallation() {
         new Thread(() -> {
             try {
                 log("--- Start Installation ---");
 
-                // 1. Env Var setzen
+                // 1. API Key
                 if(apiKey != null && !apiKey.isBlank() && chkPersistKey.isSelected()) {
                     log("Setze API Key...");
                     if(isWindows) {
                         new ProcessBuilder("setx", "GEMINI_API_KEY", apiKey).start().waitFor();
                     } else {
-                        // Mac/Linux Env var persist is tricky without restart/sourcing.
-                        // We write to rc files but current session might not see it immediately in other terminal tabs
-                        // but Catia launched via Finder usually picks up launchctl setenv
                         File rc = new File(System.getProperty("user.home"), ".zshrc");
                         Files.writeString(rc.toPath(), "\nexport GEMINI_API_KEY=\""+apiKey+"\"\n", StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-
                         try {
                             new ProcessBuilder("launchctl", "setenv", "GEMINI_API_KEY", apiKey).start().waitFor();
-                        } catch(Exception ex) { /* Ignore if launchctl fails */ }
+                        } catch(Exception ex) { /* Ignore */ }
                     }
                     log("API Key gesetzt.");
                 }
 
-                // 2. Plugins Ordner finden
-                File plugins = new File(catiaInstallDir, "plugins");
-                if(!plugins.exists() && isMac && catiaInstallDir.getName().endsWith(".app")) {
-                    File c = new File(catiaInstallDir, "Contents/plugins");
-                    File j = new File(catiaInstallDir, "Contents/Resources/Java/plugins");
-                    if(c.exists()) plugins = c;
-                    else if(j.exists()) plugins = j;
+                // 2. Plugins Ordner finden (ROBUSTE LOGIK)
+                File pluginsBase;
+
+                // Check 1: Hat der Nutzer direkt den "plugins" Ordner ausgewählt?
+                if (catiaInstallDir.getName().equalsIgnoreCase("plugins")) {
+                    pluginsBase = catiaInstallDir;
+                } else {
+                    // Check 2: Ist es ein Mac Bundle?
+                    if (isMac && catiaInstallDir.getName().endsWith(".app")) {
+                        File c = new File(catiaInstallDir, "Contents/plugins");
+                        File j = new File(catiaInstallDir, "Contents/Resources/Java/plugins");
+                        if (c.exists()) pluginsBase = c;
+                        else if (j.exists()) pluginsBase = j;
+                        else pluginsBase = new File(catiaInstallDir, "plugins"); // Fallback
+                    } else {
+                        // Check 3: Standard Windows/Linux Ordnerstruktur
+                        pluginsBase = new File(catiaInstallDir, "plugins");
+                    }
                 }
-                if (!plugins.exists()) plugins.mkdirs();
-                log("Installiere in: " + plugins.getAbsolutePath());
+
+                // Falls der Ordner "plugins" gar nicht existiert, erstellen wir ihn
+                if (!pluginsBase.exists()) {
+                    log("Erstelle 'plugins' Verzeichnis...");
+                    pluginsBase.mkdirs();
+                }
+
+                // --- FIX: Sicherstellen, dass wir nicht plugins/plugins haben ---
+                // Falls der gefundene Ordner nicht "plugins" heißt (sondern z.B. der Installationsordner war),
+                // haben wir oben ja schon "new File(..., 'plugins')" gemacht.
+                // Das passt also.
+
+                // Jetzt erstellen wir UNSEREN Unterordner
+                File myPluginDir = new File(pluginsBase, "com.hm.ai4mbse");
+                if (!myPluginDir.exists()) {
+                    log("Erstelle Plugin-Unterordner: " + myPluginDir.getName());
+                    myPluginDir.mkdirs();
+                }
+
+                log("Zielverzeichnis: " + myPluginDir.getAbsolutePath());
 
                 // 3. Kopieren
-                copyRes("ai4mbse-plugin.jar", new File(plugins, "ai4mbse-plugin.jar"));
-                copyRes("plugin.xml", new File(plugins, "plugin.xml"));
+                copyRes("ai4mbse-plugin.jar", new File(myPluginDir, "ai4mbse-plugin.jar"));
+                copyRes("plugin.xml", new File(myPluginDir, "plugin.xml"));
 
-                // 4. Config schreiben
+                // 4. Config
                 createPluginConfig(xmlExportDir);
 
                 log("--- Installation erfolgreich! ---");
