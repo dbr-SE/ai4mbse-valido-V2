@@ -70,7 +70,6 @@ public class InstallerMain extends JFrame {
     private JPanel createWelcomePanel() {
         JPanel p = new JPanel(new BorderLayout(0, 20));
 
-        // Logo
         JLabel logoLabel = new JLabel();
         logoLabel.setHorizontalAlignment(SwingConstants.CENTER);
         try {
@@ -122,7 +121,10 @@ public class InstallerMain extends JFrame {
         GridBagConstraints g = new GridBagConstraints();
         g.insets = new Insets(5,5,5,5); g.fill = GridBagConstraints.HORIZONTAL;
 
-        g.gridx=0; g.gridy=0; g.gridwidth=2; p.add(new JLabel("1. Catia Magic Installationsordner:"), g);
+        // FIX 1: Beispielpfad hinzugefügt
+        g.gridx=0; g.gridy=0; g.gridwidth=2;
+        p.add(new JLabel("1. Catia Magic Installationsordner (z.B. C:\\Program Files\\Dassault Systemes\\...):"), g);
+
         g.gridy++; g.gridwidth=1; g.weightx=1.0; txtCatiaPath = new JTextField(); p.add(txtCatiaPath, g);
         g.gridx=1; g.weightx=0.0; JButton b1 = new JButton("Suchen..."); b1.addActionListener(e -> chooseDir(txtCatiaPath)); p.add(b1, g);
 
@@ -151,7 +153,12 @@ public class InstallerMain extends JFrame {
         GridBagConstraints g = new GridBagConstraints();
         g.insets = new Insets(5,5,5,5); g.fill=GridBagConstraints.HORIZONTAL;
 
-        g.gridx=0; g.gridy=0; p.add(new JLabel("<html><b>Gemini API Key</b><br>Wird als Umgebungsvariable (GEMINI_API_KEY) gespeichert.</html>"), g);
+        g.gridx=0; g.gridy=0;
+        // FIX 2: Erklärungstext erweitert
+        p.add(new JLabel("<html><b>Gemini API Key</b><br>" +
+                "Diesen Key erhalten Sie via Google AI Studio.<br>" +
+                "Er wird lokal als Umgebungsvariable (GEMINI_API_KEY) gespeichert.</html>"), g);
+
         g.gridy++; txtApiKey = new JPasswordField(30); p.add(txtApiKey, g);
         g.gridy++; chkPersistKey = new JCheckBox("Dauerhaft im System speichern", true); p.add(chkPersistKey, g);
 
@@ -223,7 +230,6 @@ public class InstallerMain extends JFrame {
             try {
                 log("--- Start Installation ---");
 
-                // 1. API Key Setup
                 if(apiKey != null && !apiKey.isBlank() && chkPersistKey.isSelected()) {
                     log("Setze API Key...");
                     if(isWindows) {
@@ -233,12 +239,11 @@ public class InstallerMain extends JFrame {
                         Files.writeString(rc.toPath(), "\nexport GEMINI_API_KEY=\""+apiKey+"\"\n", StandardOpenOption.CREATE, StandardOpenOption.APPEND);
                         try {
                             new ProcessBuilder("launchctl", "setenv", "GEMINI_API_KEY", apiKey).start().waitFor();
-                        } catch(Exception ex) { /* Ignore */ }
+                        } catch(Exception ex) { }
                     }
                     log("API Key gesetzt.");
                 }
 
-                // 2. Plugins Ordner für Catia vorbereiten
                 File pluginsBase;
                 if (catiaInstallDir.getName().equalsIgnoreCase("plugins")) {
                     pluginsBase = catiaInstallDir;
@@ -255,52 +260,45 @@ public class InstallerMain extends JFrame {
                 }
 
                 if (!pluginsBase.exists()) pluginsBase.mkdirs();
-
                 File myPluginDir = new File(pluginsBase, "com.hm.ai4mbse");
                 if (!myPluginDir.exists()) myPluginDir.mkdirs();
 
                 log("Installiere Plugin in: " + myPluginDir.getAbsolutePath());
 
-                // 3. Plugin JARs kopieren
                 copyRes("ai4mbse-plugin.jar", new File(myPluginDir, "ai4mbse-plugin.jar"));
                 copyRes("plugin.xml", new File(myPluginDir, "plugin.xml"));
 
-                // --- FIX: USER CONFIG & DATENBANKEN ---
-                // Hier lösen wir das Schreibrechte-Problem:
-                // Alles, was veränderbar sein muss, kommt in User-Home/.ai4mbse
-
                 File userConfigDir = new File(System.getProperty("user.home"), ".ai4mbse");
-                if (!userConfigDir.exists()) {
-                    userConfigDir.mkdirs();
-                    log("User-Config Ordner erstellt: " + userConfigDir.getAbsolutePath());
-                }
+                if (!userConfigDir.exists()) userConfigDir.mkdirs();
 
-                // A) Standard-Regeln (immer überschreiben -> Update)
                 try {
                     copyRes("std_rules_db.json", new File(userConfigDir, "std_rules_db.json"));
-                    log("Standard-Regeln installiert/aktualisiert (in User-Home).");
+                    log("Standard-Regeln installiert.");
                 } catch (Exception e) {
                     log("WARNUNG: std_rules_db.json fehlt im Installer!");
                 }
 
-                // B) User-Regeln (nur erstellen, wenn nicht da -> Safe Copy)
                 File userRules = new File(userConfigDir, "rules_db.json");
                 if (!userRules.exists()) {
                     try {
                         copyRes("rules_db.json", userRules);
-                        log("User-Datenbank initialisiert (in User-Home).");
+                        log("User-Datenbank initialisiert.");
                     } catch (Exception e) {
                         log("WARNUNG: rules_db.json fehlt im Installer!");
                     }
                 }
 
-                // C) Config Datei
                 createPluginConfig(userConfigDir, xmlExportDir);
 
                 log("--- Installation erfolgreich! ---");
                 log("Bitte starten Sie Catia Magic neu.");
 
-                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(this, "Installation erfolgreich!\nDas Plugin und die Datenbanken sind eingerichtet."));
+                // FIX 3: Titel ändern & Hinweis geben
+                SwingUtilities.invokeLater(() -> {
+                    setTitle(APP_NAME + " - Fertig");
+                    JOptionPane.showMessageDialog(this, "Installation erfolgreich!\nSie können dieses Fenster nun schließen.");
+                    log(">> FERTIG. Fenster kann geschlossen werden. <<");
+                });
 
             } catch(Exception e) {
                 log("FEHLER: " + e.getMessage());
