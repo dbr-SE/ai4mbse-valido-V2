@@ -41,6 +41,25 @@ public class MainFrame extends JFrame {
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // GUT: Schließt nur das Fenster
         setLocationRelativeTo(null);
 
+        // --- LOGO LADEN ---
+        try {
+            java.net.URL iconURL = getClass().getResource("/images/logo.png");
+            if (iconURL != null) {
+                ImageIcon icon = new ImageIcon(iconURL);
+                setIconImage(icon.getImage());
+
+                // Mac Dock Icon (optional, falls unterstützt)
+                if (System.getProperty("os.name").toLowerCase().contains("mac")) {
+                    try {
+                        java.awt.Taskbar.getTaskbar().setIconImage(icon.getImage());
+                    } catch (Exception e) { /* ignorieren */ }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Logo-Fehler: " + e.getMessage());
+        }
+        // ------------------
+
         JTabbedPane tabbedPane = new JTabbedPane();
 
         // Tab 1: Regeln verwalten
