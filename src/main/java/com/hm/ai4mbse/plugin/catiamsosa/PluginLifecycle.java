@@ -72,7 +72,7 @@ public class PluginLifecycle extends Plugin {
      */
     private void addToolsMenuAction(ActionsManager manager) {
         // 1. Die Action erstellen
-        NMAction openUiAction = new NMAction("AI4MBSE_OPEN_UI", "AI Assistant öffnen", null) {
+        NMAction openUiAction = new NMAction("AI4MBSE_OPEN_UI", "VALIDO öffnen", null) {
             @Override // WICHTIG: Überschreibt Methode aus NMAction
             public void actionPerformed(ActionEvent e) {
                 // Hier öffnen wir nur noch das UI!
