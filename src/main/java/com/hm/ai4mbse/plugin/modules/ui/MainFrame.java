@@ -37,31 +37,9 @@ public class MainFrame extends JFrame {
 
         setTitle("AI4MBSE - Assistant");
         setSize(1350, 850);
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        //setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); // BÖSE: Killt Catia
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // GUT: Schließt nur das Fenster
         setLocationRelativeTo(null);
-        // --- NEU: LOGO LADEN ---
-        try {
-            // 1. Logo laden (Pfad muss zu src/main/resources/images/logo.png passen)
-            java.net.URL iconURL = getClass().getResource("/images/logo.png");
-            if (iconURL != null) {
-                ImageIcon icon = new ImageIcon(iconURL);
-
-                // 2. Icon für das Fenster setzen (Titlebar & Taskbar)
-                setIconImage(icon.getImage());
-
-                // 3. Optional: Mac Dock Icon setzen
-                if (System.getProperty("os.name").toLowerCase().contains("mac")) {
-                    try {
-                        java.awt.Taskbar.getTaskbar().setIconImage(icon.getImage());
-                    } catch (Exception e) {
-                        // Ignorieren, falls System es nicht unterstützt
-                    }
-                }
-            }
-        } catch (Exception e) {
-            System.err.println("Konnte Plugin-Logo nicht setzen: " + e.getMessage());
-        }
-        // -----------------------
 
         JTabbedPane tabbedPane = new JTabbedPane();
 

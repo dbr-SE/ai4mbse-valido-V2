@@ -3,6 +3,7 @@ package com.hm.ai4mbse.plugin.modules.database;
 import com.hm.ai4mbse.plugin.interfaces.DatabaseService;
 import com.hm.ai4mbse.plugin.model.RuleDefinition;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -17,39 +18,46 @@ import java.util.regex.Pattern;
 
 public class JsonDatabaseService implements DatabaseService {
 
-    private static final String DB_FILE = "rules_db.json";
-    private static final String STD_DB_FILE = "std_rules_db.json";
+    // FIX: Speicherort ist jetzt immer im User-Home (.ai4mbse)
+    // Das garantiert Schreibrechte auf Windows & Mac
+    private static final String STORAGE_DIR = System.getProperty("user.home") + File.separator + ".ai4mbse";
+    private static final String DB_FILE = STORAGE_DIR + File.separator + "rules_db.json";
+    private static final String STD_DB_FILE = STORAGE_DIR + File.separator + "std_rules_db.json";
 
     public JsonDatabaseService() {
+        // Sicherstellen, dass der Ordner existiert
+        File dir = new File(STORAGE_DIR);
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
+
         // Init: Sicherstellen, dass die Dateien existieren (aus Resources kopieren)
-        ensureFileExists(DB_FILE);
-        ensureFileExists(STD_DB_FILE);
+        ensureFileExists(DB_FILE, "rules_db.json");
+        ensureFileExists(STD_DB_FILE, "std_rules_db.json");
     }
 
-    private void ensureFileExists(String fileName) {
-        Path path = Path.of(fileName);
-        if (!Files.exists(path)) {
-            System.out.println("[DB] Datei fehlt lokal: " + fileName + ". Versuche aus Resources zu kopieren...");
+    private void ensureFileExists(String targetPathStr, String resourceName) {
+        Path targetPath = Path.of(targetPathStr);
+        // Nur kopieren, wenn lokal nicht vorhanden
+        // (Bei std_rules_db könnte man überlegen immer zu überschreiben,
+        // aber das macht jetzt der Installer beim Update)
+        if (!Files.exists(targetPath)) {
+            System.out.println("[DB] Datei fehlt lokal: " + targetPathStr + ". Kopiere aus JAR...");
 
-            // Versuch 1: Normaler Classloader
-            InputStream in = getClass().getClassLoader().getResourceAsStream(fileName);
-
-            // Versuch 2: Root-Pfad (wichtig für JARs)
-            if (in == null) {
-                in = getClass().getResourceAsStream("/" + fileName);
-            }
-
-            if (in != null) {
-                try {
-                    Files.copy(in, path, StandardCopyOption.REPLACE_EXISTING);
-                    System.out.println("[DB] Erfolgreich kopiert: " + fileName);
-                    in.close();
-                } catch (IOException e) {
-                    System.err.println("[DB] Fehler beim Kopieren von " + fileName);
-                    e.printStackTrace();
+            try (InputStream in = getClass().getResourceAsStream("/" + resourceName)) {
+                if (in != null) {
+                    Files.copy(in, targetPath, StandardCopyOption.REPLACE_EXISTING);
+                    System.out.println("[DB] Initialisiert: " + targetPathStr);
+                } else {
+                    System.err.println("[DB] WARNUNG: Resource '" + resourceName + "' nicht im JAR gefunden!");
+                    // Fallback: Leere Datei erstellen, falls es die User-DB ist
+                    if (resourceName.equals("rules_db.json")) {
+                        Files.writeString(targetPath, "[]");
+                    }
                 }
-            } else {
-                System.err.println("[DB] WARNUNG: Resource '" + fileName + "' nicht im Classpath/JAR gefunden!");
+            } catch (IOException e) {
+                System.err.println("[DB] Fehler beim Kopieren: " + e.getMessage());
+                e.printStackTrace();
             }
         }
     }
@@ -90,9 +98,7 @@ public class JsonDatabaseService implements DatabaseService {
     private List<RuleDefinition> loadRulesFromFile(String fileName) {
         Path path = Path.of(fileName);
         if (!Files.exists(path)) {
-            // Versuch erneutes Kopieren falls gelöscht
-            ensureFileExists(fileName);
-            if (!Files.exists(path)) return new ArrayList<>();
+            return new ArrayList<>();
         }
 
         try {
