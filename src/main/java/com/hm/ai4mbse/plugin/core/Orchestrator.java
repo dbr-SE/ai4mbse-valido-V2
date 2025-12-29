@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
+import java.io.InputStream;
 /**
  * Der "Super-Orchestrator".
  */
@@ -177,6 +177,7 @@ public class Orchestrator implements UiController {
 
         executeAsyncWithLoading("Modellprüfung läuft...", () -> {
             try {
+                // 1. XML File holen (oder neu exportieren)
                 File xmlFile = this.autoExportedFile;
                 if (xmlFile == null || !xmlFile.exists()) {
                     System.out.println("Orchestrator: Export nicht gefunden, starte Neu-Export...");
@@ -196,6 +197,7 @@ public class Orchestrator implements UiController {
                     System.out.println("Warnung: Kein XML-File verfügbar.");
                 }
 
+                // 2. Temporäre Regel-Datei erstellen
                 Path tempRuleFile = Files.createTempFile("active_rule_", ".txt");
                 Files.writeString(tempRuleFile, technicalRule);
 
@@ -207,23 +209,32 @@ public class Orchestrator implements UiController {
                 config.setSystemElementScope("Aktuelles Modell");
                 config.getParameters().put("runId", "run_" + System.currentTimeMillis());
 
-                Path resourcesDir = Path.of("src/main/resources");
-                Path dummyJsonPath = resourcesDir.resolve("dummy_run_config.json");
+                // --- FIX START: Temporäres Verzeichnis nutzen ---
+                Path tempDir = Files.createTempDirectory("ai4mbse_run_");
+                // Dummy-Anchor, damit Run_Review weiß, wohin (nutzt .getParent())
+                Path dummyJsonAnchor = tempDir.resolve("anchor.json");
 
-                runReviewLogic.startReview(config, dummyJsonPath);
+                // Review starten (schreibt in tempDir)
+                runReviewLogic.startReview(config, dummyJsonAnchor);
 
                 String runId = config.getParameters().get("runId");
-                Path resultFile = resourcesDir.resolve("review_result_" + runId + ".txt");
+                Path resultFile = tempDir.resolve("review_result_" + runId + ".txt");
+                // --- FIX ENDE ---
 
+                // 3. Ergebnis parsen und Cleanup
                 List<ReviewDisplayItem> displayItems = new ArrayList<>();
                 if (Files.exists(resultFile)) {
                     String reportText = Files.readString(resultFile);
                     List<ReviewIssue> issues = visualization.parseTextReportToIssues(reportText);
                     displayItems = visualization.prepareDisplayData(issues);
+
+                    // Aufräumen
                     Files.deleteIfExists(tempRuleFile);
                     Files.deleteIfExists(resultFile);
+                    Files.deleteIfExists(tempDir); // Optional: Leeren Ordner auch löschen
                 }
 
+                // 4. GUI Update (muss final sein für Lambda)
                 List<ReviewDisplayItem> finalItems = displayItems;
                 SwingUtilities.invokeLater(() -> resultCallback.accept(finalItems));
 
@@ -361,15 +372,23 @@ public class Orchestrator implements UiController {
 
     private void showApiHelp() {
         try {
-            Path helpFile = Path.of("src/main/resources/api_help.json");
-            String json = Files.exists(helpFile) ? Files.readString(helpFile, StandardCharsets.UTF_8) : "Hilfe-Datei nicht gefunden.";
+            // FIX: Laden über Classpath statt Dateisystem (funktioniert auch im JAR)
+            java.io.InputStream is = getClass().getResourceAsStream("/api_help.json");
+            String json;
+            if (is != null) {
+                json = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            } else {
+                json = "{\"windows\": \"Hilfe-Datei nicht gefunden (Classpath Error).\"}";
+            }
+
             String windowsText = extractJsonValue(json, "windows");
             JTextArea textArea = new JTextArea("=== ANLEITUNG ===\n" + windowsText);
             textArea.setEditable(false);
             JOptionPane.showMessageDialog(null, new JScrollPane(textArea), "Hilfe", JOptionPane.INFORMATION_MESSAGE);
-        } catch (Exception e) { e.printStackTrace(); }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
-
     private String extractJsonValue(String json, String key) {
         Pattern pattern = Pattern.compile("\"" + key + "\"\\s*:\\s*\"(.*?)\"", Pattern.DOTALL);
         Matcher matcher = pattern.matcher(json);
@@ -378,9 +397,9 @@ public class Orchestrator implements UiController {
 
     @Override
     public void handleManualApiKeySubmit(String key) {
+        // FIX: .trim() entfernt versehentliche Leerzeichen beim Kopieren
         if (key != null && !key.isBlank()) {
-            kiCommunication.setSessionApiKey(key);
-            // Kein Popup nötig beim Start, der Loop prüft es dann einfach als "valid"
+            kiCommunication.setSessionApiKey(key.trim());
         }
     }
 }
