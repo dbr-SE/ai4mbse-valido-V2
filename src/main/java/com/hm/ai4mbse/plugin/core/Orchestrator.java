@@ -23,7 +23,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -40,14 +39,16 @@ public class Orchestrator implements UiController {
     private MainFrame mainFrame;
     private File autoExportedFile;
 
-    // FEATURE 3: Flag zum Abbrechen
+    // Feature 3: Flag zum Abbrechen
     private volatile boolean currentProcessCancelled = false;
 
     public Orchestrator() {
         this.kiCommunication = new KI_Communication();
-        if (!ensureApiKeyExists()) {
-            System.out.println("Orchestrator: Kein API Key. Start abgebrochen.");
-        }
+
+        // --- FEATURE 5 ÄNDERUNG: Check hier ENTFERNT ---
+        // if (!ensureApiKeyExists()) { ... }
+        // -----------------------------------------------
+
         this.database = new JsonDatabaseService();
         this.visualization = new VisualizationService();
         this.createRuleLogic = new Create_Rule();
@@ -92,6 +93,10 @@ public class Orchestrator implements UiController {
 
     @Override
     public void handleSaveRuleRequest(RuleDefinition ruleInput) {
+        // --- FEATURE 5 ÄNDERUNG: Check HIERHIN verschoben ---
+        if (!ensureApiKeyExists()) return;
+        // ----------------------------------------------------
+
         currentProcessCancelled = false;
         executeAsyncWithLoading("Regel wird generiert...", () -> {
             try {
@@ -158,13 +163,16 @@ public class Orchestrator implements UiController {
 
     @Override
     public void handleRunReviewFromTab(RuleDefinition rule, Consumer<ReviewResult> resultCallback) {
+        // --- FEATURE 5 ÄNDERUNG: Check HIERHIN verschoben ---
+        if (!ensureApiKeyExists()) return;
+        // ----------------------------------------------------
+
         String technicalRule = rule.get("technical_prompt");
         if (technicalRule == null || technicalRule.isEmpty()) {
             JOptionPane.showMessageDialog(mainFrame, "Regel hat keinen technischen Prompt.");
             return;
         }
 
-        // Reset Cancellation Flag
         currentProcessCancelled = false;
 
         executeAsyncWithLoading("Modellprüfung läuft...", () -> {
@@ -198,7 +206,6 @@ public class Orchestrator implements UiController {
                 // Start Review
                 runReviewLogic.startReview(config, dummyJsonAnchor);
 
-                // FEATURE 3: Check NACH der Berechnung
                 if (currentProcessCancelled) {
                     System.out.println("Prozess wurde abgebrochen. Ergebnisse werden verworfen.");
                     Files.deleteIfExists(tempRuleFile);
@@ -242,9 +249,7 @@ public class Orchestrator implements UiController {
                     if (!currentProcessCancelled)
                         SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, "Fehler: Keine Ergebnisdatei."));
                 }
-                // FIX: "catch InterruptedException" entfernt, da startReview das nicht wirft.
             } catch (Exception e) {
-                // Falls durch .interrupt() doch eine Exception getriggert wurde (z.B. IO), fangen wir sie hier
                 if (!currentProcessCancelled) {
                     e.printStackTrace();
                     SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, "Fehler: " + e.getMessage()));
@@ -279,10 +284,17 @@ public class Orchestrator implements UiController {
         });
     }
 
+    // ACHTUNG: Feature 4 ist hier noch NICHT drin, da wir Feature 5 zuerst machen.
+    // Die Methode handleExportReportRequest fehlt also absichtlich (oder ist leer).
+    // Wenn du sie im Interface hast, müssen wir sie leer implementieren:
+
+    // Fallback falls Interface Feature 4 schon hat:
+    // @Override
+    // public void handleExportReportRequest(File targetFile, List<ReviewDisplayItem> results) { }
+
     @Override
     public List<ReviewDisplayItem> handleDisplayRequest(String reviewType) { return new ArrayList<>(); }
 
-    // --- FEATURE 3: Ladedialog mit Abbruch-Button ---
     private void executeAsyncWithLoading(String title, Runnable task) {
         JDialog loadingDialog = new JDialog(mainFrame, title, true);
         JPanel p = new JPanel(new BorderLayout(20, 20));
@@ -303,7 +315,7 @@ public class Orchestrator implements UiController {
         p.add(centerPanel, BorderLayout.CENTER);
         p.add(timerLabel, BorderLayout.NORTH);
 
-        // NEU: Abbruch Button
+        // Abbruch Button
         JPanel southPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
         southPanel.setBackground(Color.WHITE);
         JButton btnCancel = new JButton("Abbrechen");
@@ -384,17 +396,28 @@ public class Orchestrator implements UiController {
         }
     }
 
+    // Feature 5 Hilfsmethoden
     private boolean ensureApiKeyExists() {
         while (!hasValidKey()) {
             Object[] options = {"Erneut prüfen", "Hilfe (?)", "Manuell eingeben"};
-            int choice = JOptionPane.showOptionDialog(null, "Der GEMINI_API_KEY wurde nicht gefunden!", "Konfiguration fehlt", JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.ERROR_MESSAGE, null, options, options[0]);
-            if (choice == 0) continue;
-            else if (choice == 1) showApiHelp();
-            else if (choice == 2) {
-                String input = JOptionPane.showInputDialog(null, "Bitte API Key hier einfügen:", "Manuelle Eingabe", JOptionPane.PLAIN_MESSAGE);
+            // Wir nutzen mainFrame als Parent, falls vorhanden
+            Component parent = (mainFrame != null) ? mainFrame : null;
+
+            int choice = JOptionPane.showOptionDialog(parent,
+                    "Der GEMINI_API_KEY wurde nicht gefunden!\nDas Plugin kann ohne Key keine Anfragen senden.", "Konfiguration fehlt",
+                    JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.ERROR_MESSAGE, null, options, options[0]);
+
+            if (choice == 0) {
+                continue;
+            } else if (choice == 1) {
+                showApiHelp();
+            } else if (choice == 2) {
+                String input = JOptionPane.showInputDialog(parent, "Bitte API Key hier einfügen:", "Manuelle Eingabe", JOptionPane.PLAIN_MESSAGE);
                 handleManualApiKeySubmit(input);
                 if (hasValidKey()) return true;
-            } else return false;
+            } else {
+                return false; // User hat Abbrechen gedrückt
+            }
         }
         return true;
     }
