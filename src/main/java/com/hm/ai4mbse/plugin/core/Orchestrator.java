@@ -28,6 +28,7 @@ import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.io.InputStream;
+
 /**
  * Der "Super-Orchestrator".
  */
@@ -39,15 +40,17 @@ public class Orchestrator implements UiController {
     private final Create_Rule createRuleLogic;
     private final Run_Review runReviewLogic;
 
+    // NEU: Referenz auf das Hauptfenster halten
+    private MainFrame mainFrame;
     private File autoExportedFile;
 
     public Orchestrator() {
-        this.kiCommunication = new KI_Communication(); // Früh initialisieren für Key-Setzung
+        this.kiCommunication = new KI_Communication();
 
-        // 1. Sicherheits-Check: API Key prüfen (mit Dialog-Loop)
+        // 1. Sicherheits-Check: API Key prüfen
+        // (Feature 5 machen wir später: Lazy Check. Aktuell bleibt es im Konstruktor)
         if (!ensureApiKeyExists()) {
             System.out.println("Orchestrator: Kein API Key. Start abgebrochen.");
-            // Wir lassen den Konstruktor durchlaufen, aber das Plugin ist "stumm".
         }
 
         this.database = new JsonDatabaseService();
@@ -62,24 +65,23 @@ public class Orchestrator implements UiController {
         SwingUtilities.invokeLater(() -> new MainFrame(new Orchestrator()).setVisible(true));
     }
 
-    // ... (Teil 1 & 2 unverändert) ...
-
     public void startWithFile(File exportFile) {
         this.autoExportedFile = exportFile;
-        System.out.println("Orchestrator: Auto-Export empfangen: " + exportFile.getAbsolutePath());
+        System.out.println("Orchestrator: Datei empfangen: " + exportFile.getAbsolutePath());
     }
 
+    // --- Geändert für Feature 1 (Minimierung verhindern) ---
     public void showMainWindow() {
-        if (autoExportedFile == null) {
-            JOptionPane.showMessageDialog(null,
-                    "Das Modell wird noch analysiert oder es ist kein Projekt offen.\nBitte warten Sie einen Moment...",
-                    "AI4MBSE Assistant", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
         SwingUtilities.invokeLater(() -> {
-            MainFrame frame = new MainFrame(this);
-            frame.setVisible(true);
-            frame.toFront();
+            // Falls schon offen, nur nach vorne holen
+            if (mainFrame != null && mainFrame.isVisible()) {
+                mainFrame.toFront();
+                return;
+            }
+            // Neu erstellen und Referenz speichern
+            mainFrame = new MainFrame(this);
+            mainFrame.setVisible(true);
+            mainFrame.toFront();
         });
     }
 
@@ -124,10 +126,11 @@ public class Orchestrator implements UiController {
                 finalRule.put("technical_prompt", technicalRule);
 
                 database.saveRule(finalRule);
-                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(null, "Regel erfolgreich generiert und gespeichert!"));
+                // Fix: mainFrame als Parent nutzen
+                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, "Regel erfolgreich generiert und gespeichert!"));
             } catch (Exception e) {
                 e.printStackTrace();
-                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(null, "Fehler: " + e.getMessage()));
+                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, "Fehler: " + e.getMessage()));
             }
         });
     }
@@ -163,41 +166,36 @@ public class Orchestrator implements UiController {
             }
             JTextArea area = new JTextArea(sb.toString());
             area.setEditable(false);
-            JOptionPane.showMessageDialog(null, new JScrollPane(area), "Ergebnis", JOptionPane.INFORMATION_MESSAGE);
+            // Fix: mainFrame als Parent nutzen
+            JOptionPane.showMessageDialog(mainFrame, new JScrollPane(area), "Ergebnis", JOptionPane.INFORMATION_MESSAGE);
         });
     }
 
+    // --- Feature 1 (Fixed) ---
     @Override
     public void handleRunReviewFromTab(RuleDefinition rule, Consumer<List<ReviewDisplayItem>> resultCallback) {
         String technicalRule = rule.get("technical_prompt");
         if (technicalRule == null || technicalRule.isEmpty()) {
-            JOptionPane.showMessageDialog(null, "Regel hat keinen technischen Prompt.");
+            JOptionPane.showMessageDialog(mainFrame, "Regel hat keinen technischen Prompt.");
             return;
         }
 
         executeAsyncWithLoading("Modellprüfung läuft...", () -> {
             try {
-                // 1. XML File holen (oder neu exportieren)
+                // Check ob Export da ist
+                if (this.autoExportedFile == null || !this.autoExportedFile.exists()) {
+                    SwingUtilities.invokeLater(() ->
+                            // Fix: mainFrame als Parent nutzen
+                            JOptionPane.showMessageDialog(mainFrame,
+                                    "Keine Modelldaten gefunden!\nBitte klicken Sie erst auf 'XML Exportieren'.",
+                                    "Export fehlt",
+                                    JOptionPane.WARNING_MESSAGE)
+                    );
+                    // WICHTIG: KEIN leeres Result senden, um das "Keine Verstöße" Fenster zu verhindern.
+                    return;
+                }
                 File xmlFile = this.autoExportedFile;
-                if (xmlFile == null || !xmlFile.exists()) {
-                    System.out.println("Orchestrator: Export nicht gefunden, starte Neu-Export...");
-                    try {
-                        Project project = Application.getInstance().getProject();
-                        xmlFile = ModelExportHelper.createXmlSnapshot(project);
-                        this.autoExportedFile = xmlFile;
-                    } catch (Throwable t) {
-                        System.out.println("Orchestrator: MagicDraw API nicht verfügbar (Lokaler Test?)");
-                        if (new File("src/resources/sample_project.xml").exists()) {
-                            xmlFile = new File("src/resources/sample_project.xml");
-                        }
-                    }
-                }
 
-                if (xmlFile == null) {
-                    System.out.println("Warnung: Kein XML-File verfügbar.");
-                }
-
-                // 2. Temporäre Regel-Datei erstellen
                 Path tempRuleFile = Files.createTempFile("active_rule_", ".txt");
                 Files.writeString(tempRuleFile, technicalRule);
 
@@ -209,38 +207,64 @@ public class Orchestrator implements UiController {
                 config.setSystemElementScope("Aktuelles Modell");
                 config.getParameters().put("runId", "run_" + System.currentTimeMillis());
 
-                // --- FIX START: Temporäres Verzeichnis nutzen ---
                 Path tempDir = Files.createTempDirectory("ai4mbse_run_");
-                // Dummy-Anchor, damit Run_Review weiß, wohin (nutzt .getParent())
                 Path dummyJsonAnchor = tempDir.resolve("anchor.json");
 
-                // Review starten (schreibt in tempDir)
                 runReviewLogic.startReview(config, dummyJsonAnchor);
 
                 String runId = config.getParameters().get("runId");
                 Path resultFile = tempDir.resolve("review_result_" + runId + ".txt");
-                // --- FIX ENDE ---
 
-                // 3. Ergebnis parsen und Cleanup
                 List<ReviewDisplayItem> displayItems = new ArrayList<>();
                 if (Files.exists(resultFile)) {
                     String reportText = Files.readString(resultFile);
                     List<ReviewIssue> issues = visualization.parseTextReportToIssues(reportText);
                     displayItems = visualization.prepareDisplayData(issues);
 
-                    // Aufräumen
                     Files.deleteIfExists(tempRuleFile);
                     Files.deleteIfExists(resultFile);
-                    Files.deleteIfExists(tempDir); // Optional: Leeren Ordner auch löschen
+                    Files.deleteIfExists(tempDir);
                 }
 
-                // 4. GUI Update (muss final sein für Lambda)
                 List<ReviewDisplayItem> finalItems = displayItems;
                 SwingUtilities.invokeLater(() -> resultCallback.accept(finalItems));
 
             } catch (Exception e) {
                 e.printStackTrace();
-                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(null, "Fehler: " + e.getMessage()));
+                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, "Fehler: " + e.getMessage()));
+            }
+        });
+    }
+
+    // --- Feature 1 (Fixed) ---
+    @Override
+    public void handleManualExportRequest() {
+        executeAsyncWithLoading("Exportiere Modell...", () -> {
+            try {
+                Project project = Application.getInstance().getProject();
+                if (project == null) {
+                    throw new IllegalStateException("Kein aktives Projekt gefunden.");
+                }
+
+                File xmlFile = ModelExportHelper.createXmlSnapshot(project);
+                this.autoExportedFile = xmlFile;
+
+                SwingUtilities.invokeLater(() ->
+                        // Fix: mainFrame als Parent nutzen
+                        JOptionPane.showMessageDialog(mainFrame,
+                                "Export erfolgreich!\nDatei: " + xmlFile.getName(),
+                                "Info",
+                                JOptionPane.INFORMATION_MESSAGE)
+                );
+            } catch (Throwable t) {
+                t.printStackTrace();
+                SwingUtilities.invokeLater(() ->
+                        // Fix: mainFrame als Parent nutzen
+                        JOptionPane.showMessageDialog(mainFrame,
+                                "Export fehlgeschlagen: " + t.getMessage(),
+                                "Fehler",
+                                JOptionPane.ERROR_MESSAGE)
+                );
             }
         });
     }
@@ -249,7 +273,9 @@ public class Orchestrator implements UiController {
     public List<ReviewDisplayItem> handleDisplayRequest(String reviewType) { return new ArrayList<>(); }
 
     private void executeAsyncWithLoading(String title, Runnable task) {
-        JDialog loadingDialog = new JDialog((Frame)null, title, true);
+        // Fix: mainFrame als Parent nutzen, damit Ladebalken AUF dem Fenster bleibt
+        JDialog loadingDialog = new JDialog(mainFrame, title, true);
+
         JPanel p = new JPanel(new BorderLayout(20, 20));
         p.setBackground(Color.WHITE);
         p.setBorder(BorderFactory.createEmptyBorder(30, 40, 30, 40));
@@ -273,7 +299,7 @@ public class Orchestrator implements UiController {
         ((JPanel)loadingDialog.getContentPane()).setBorder(new javax.swing.border.LineBorder(Color.LIGHT_GRAY, 1));
 
         loadingDialog.pack();
-        loadingDialog.setLocationRelativeTo(null);
+        loadingDialog.setLocationRelativeTo(mainFrame); // Zentriert zum Plugin Fenster
 
         long startTime = System.currentTimeMillis();
         Timer uiTimer = new Timer(100, e -> {
@@ -324,45 +350,39 @@ public class Orchestrator implements UiController {
     }
 
     // =================================================================
-    //               API KEY HELPER (ANGPEASST)
+    //               API KEY HELPER
     // =================================================================
 
     private boolean ensureApiKeyExists() {
         while (!hasValidKey()) {
-            // Änderung: Ignorieren Button entfernt, Manuelle Eingabe hinzugefügt
             Object[] options = {"Erneut prüfen", "Hilfe (?)", "Manuell eingeben"};
+            // Hier nutzen wir noch 'null', da mainFrame beim Start noch nicht existiert.
+            // Feature 5 wird das später komplett verschieben.
             int choice = JOptionPane.showOptionDialog(null,
                     "Der GEMINI_API_KEY wurde nicht gefunden!\nDas Plugin kann ohne Key keine Anfragen senden.", "Konfiguration fehlt",
                     JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.ERROR_MESSAGE, null, options, options[0]);
 
             if (choice == 0) {
-                // Erneut prüfen loop
                 continue;
             } else if (choice == 1) {
                 showApiHelp();
             } else if (choice == 2) {
-                // Manuelle Eingabe
                 String input = JOptionPane.showInputDialog(null, "Bitte API Key hier einfügen:", "Manuelle Eingabe", JOptionPane.PLAIN_MESSAGE);
                 if (input != null && !input.isBlank()) {
                     handleManualApiKeySubmit(input);
-                    return true; // Key gesetzt, weiter gehts
+                    return true;
                 }
             } else {
-                return false; // Fenster geschlossen
+                return false;
             }
         }
         return true;
     }
 
     private boolean hasValidKey() {
-        // 1. Prüfe Session Key (wurde manuell gesetzt?)
         if (kiCommunication.hasSessionKey()) return true;
-
-        // 2. Prüfe Umgebungsvariable
         String envKey = System.getenv("GEMINI_API_KEY");
         if (envKey != null && !envKey.isBlank()) return true;
-
-        // 3. Prüfe Datei
         Path keyFile = Path.of("api_key.txt");
         if (Files.exists(keyFile)) {
             try { return !Files.readString(keyFile).trim().isEmpty(); } catch (IOException e) { return false; }
@@ -372,7 +392,6 @@ public class Orchestrator implements UiController {
 
     private void showApiHelp() {
         try {
-            // FIX: Laden über Classpath statt Dateisystem (funktioniert auch im JAR)
             java.io.InputStream is = getClass().getResourceAsStream("/api_help.json");
             String json;
             if (is != null) {
@@ -389,6 +408,7 @@ public class Orchestrator implements UiController {
             e.printStackTrace();
         }
     }
+
     private String extractJsonValue(String json, String key) {
         Pattern pattern = Pattern.compile("\"" + key + "\"\\s*:\\s*\"(.*?)\"", Pattern.DOTALL);
         Matcher matcher = pattern.matcher(json);
@@ -397,7 +417,6 @@ public class Orchestrator implements UiController {
 
     @Override
     public void handleManualApiKeySubmit(String key) {
-        // FIX: .trim() entfernt versehentliche Leerzeichen beim Kopieren
         if (key != null && !key.isBlank()) {
             kiCommunication.setSessionApiKey(key.trim());
         }

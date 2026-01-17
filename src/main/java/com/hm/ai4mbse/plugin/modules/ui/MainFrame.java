@@ -371,6 +371,21 @@ public class MainFrame extends JFrame {
         controlPanel.add(ruleSelector);
         controlPanel.add(btnStart);
 
+        // XML EXPORT BUTTON
+        JButton btnExport = new JButton("XML Exportieren");
+        btnExport.setToolTipText("Erzeugt einen aktuellen Snapshot des Modells für die Prüfung");
+        btnExport.setBackground(new Color(240, 240, 240));
+        btnExport.setPreferredSize(new Dimension(130, 30));
+        btnExport.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
+
+        btnExport.addActionListener(e -> {
+            controller.handleManualExportRequest();
+        });
+
+        controlPanel.add(Box.createHorizontalStrut(10)); // Abstand
+        controlPanel.add(btnExport);
+        // ------------------------------
+
         // FIX 2: OHNE Icon, nur Text "API Key", SansSerif Font
         JButton btnApiKey = new JButton("API Key ändern");
         btnApiKey.setToolTipText("API Key manuell eingeben (für diese Sitzung)");

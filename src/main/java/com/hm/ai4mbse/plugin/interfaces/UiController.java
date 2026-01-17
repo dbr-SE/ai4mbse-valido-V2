@@ -32,4 +32,6 @@ public interface UiController {
 
     // API Key manuell setzen
     void handleManualApiKeySubmit(String key);
+
+    void handleManualExportRequest();
 }
