@@ -23,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -38,6 +39,9 @@ public class Orchestrator implements UiController {
 
     private MainFrame mainFrame;
     private File autoExportedFile;
+
+    // FEATURE 3: Flag zum Abbrechen
+    private volatile boolean currentProcessCancelled = false;
 
     public Orchestrator() {
         this.kiCommunication = new KI_Communication();
@@ -88,8 +92,11 @@ public class Orchestrator implements UiController {
 
     @Override
     public void handleSaveRuleRequest(RuleDefinition ruleInput) {
+        currentProcessCancelled = false;
         executeAsyncWithLoading("Regel wird generiert...", () -> {
             try {
+                if (currentProcessCancelled) return;
+
                 RuleCreationConfig config = new RuleCreationConfig();
                 config.setRegeltitel(ruleInput.get("regeltitel"));
                 config.setZiel(ruleInput.get("ziel"));
@@ -107,6 +114,8 @@ public class Orchestrator implements UiController {
                 String prompt = createRuleLogic.buildRuleCreationPrompt(config);
                 String technicalRule = kiCommunication.callGeminiWithPrompt(prompt);
 
+                if (currentProcessCancelled) return;
+
                 RuleDefinition finalRule = new RuleDefinition();
                 finalRule.getData().putAll(ruleInput.getData());
                 finalRule.put("generated_prompt_request", prompt);
@@ -115,8 +124,10 @@ public class Orchestrator implements UiController {
                 database.saveRule(finalRule);
                 SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, "Regel erfolgreich generiert und gespeichert!"));
             } catch (Exception e) {
-                e.printStackTrace();
-                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, "Fehler: " + e.getMessage()));
+                if (!currentProcessCancelled) {
+                    e.printStackTrace();
+                    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, "Fehler: " + e.getMessage()));
+                }
             }
         });
     }
@@ -132,7 +143,6 @@ public class Orchestrator implements UiController {
 
     @Override
     public void handleRunSingleRuleRequest(RuleDefinition rule) {
-        // Legacy Support
         handleRunReviewFromTab(rule, (result) -> {
             SwingUtilities.invokeLater(() -> {
                 if (result.getStatus() == ReviewResult.Status.ISSUES_FOUND) {
@@ -146,7 +156,6 @@ public class Orchestrator implements UiController {
         });
     }
 
-    // --- FEATURE 2 (ARCHITEKTUR-FIX) ---
     @Override
     public void handleRunReviewFromTab(RuleDefinition rule, Consumer<ReviewResult> resultCallback) {
         String technicalRule = rule.get("technical_prompt");
@@ -155,8 +164,13 @@ public class Orchestrator implements UiController {
             return;
         }
 
+        // Reset Cancellation Flag
+        currentProcessCancelled = false;
+
         executeAsyncWithLoading("Modellprüfung läuft...", () -> {
             try {
+                if (currentProcessCancelled) return;
+
                 if (this.autoExportedFile == null || !this.autoExportedFile.exists()) {
                     SwingUtilities.invokeLater(() ->
                             JOptionPane.showMessageDialog(mainFrame,
@@ -181,7 +195,16 @@ public class Orchestrator implements UiController {
                 Path tempDir = Files.createTempDirectory("ai4mbse_run_");
                 Path dummyJsonAnchor = tempDir.resolve("anchor.json");
 
+                // Start Review
                 runReviewLogic.startReview(config, dummyJsonAnchor);
+
+                // FEATURE 3: Check NACH der Berechnung
+                if (currentProcessCancelled) {
+                    System.out.println("Prozess wurde abgebrochen. Ergebnisse werden verworfen.");
+                    Files.deleteIfExists(tempRuleFile);
+                    try { Files.deleteIfExists(tempDir); } catch (Exception ignored){}
+                    return; // NICHTS ANZEIGEN
+                }
 
                 String runId = config.getParameters().get("runId");
                 Path resultFile = tempDir.resolve("review_result_" + runId + ".txt");
@@ -194,67 +217,64 @@ public class Orchestrator implements UiController {
                     Files.deleteIfExists(resultFile);
                     Files.deleteIfExists(tempDir);
 
-                    // Nur Daten verpacken
                     ReviewResult uiResult;
-
                     switch (analysis.getStatus()) {
                         case SUCCESS_NO_ISSUES:
-                            uiResult = new ReviewResult(
-                                    ReviewResult.Status.SUCCESS,
-                                    "Glückwunsch, dein Modell wurde erfolgreich gereviewed.\nVALIDO konnte keine Fehler erkennen.",
-                                    new ArrayList<>()
-                            );
+                            uiResult = new ReviewResult(ReviewResult.Status.SUCCESS,
+                                    "Glückwunsch, dein Modell wurde erfolgreich gereviewed.\nVALIDO konnte keine Fehler erkennen.", new ArrayList<>());
                             break;
                         case PARSING_ERROR:
-                            uiResult = new ReviewResult(
-                                    ReviewResult.Status.FAILURE,
-                                    "Der Review ist fehlgeschlagen (Parsing Error).\n\n" +
-                                            "Das Plugin konnte die Antwort der KI nicht lesen.\n" +
-                                            "Mögliche Gründe:\n" +
-                                            "1. Token-Limit überschritten.\n2. KI Formatfehler.\n\nBitte warten Sie eine Minute.",
-                                    new ArrayList<>()
-                            );
+                            uiResult = new ReviewResult(ReviewResult.Status.FAILURE,
+                                    "Der Review ist fehlgeschlagen (Parsing Error).\n\nDas Plugin konnte die Antwort der KI nicht lesen.\nBitte warten Sie eine Minute.", new ArrayList<>());
                             break;
                         case ISSUES_FOUND:
                         default:
                             List<ReviewDisplayItem> items = visualization.prepareDisplayData(analysis.getIssues());
-                            uiResult = new ReviewResult(
-                                    ReviewResult.Status.ISSUES_FOUND,
-                                    "Fehler gefunden.",
-                                    items
-                            );
+                            uiResult = new ReviewResult(ReviewResult.Status.ISSUES_FOUND, "Fehler gefunden.", items);
                             break;
                     }
 
-                    // Ergebnis an die UI senden
-                    SwingUtilities.invokeLater(() -> resultCallback.accept(uiResult));
+                    if (!currentProcessCancelled) {
+                        SwingUtilities.invokeLater(() -> resultCallback.accept(uiResult));
+                    }
 
                 } else {
-                    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, "Fehler: Keine Ergebnisdatei."));
+                    if (!currentProcessCancelled)
+                        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, "Fehler: Keine Ergebnisdatei."));
                 }
+                // FIX: "catch InterruptedException" entfernt, da startReview das nicht wirft.
             } catch (Exception e) {
-                e.printStackTrace();
-                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, "Fehler: " + e.getMessage()));
+                // Falls durch .interrupt() doch eine Exception getriggert wurde (z.B. IO), fangen wir sie hier
+                if (!currentProcessCancelled) {
+                    e.printStackTrace();
+                    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, "Fehler: " + e.getMessage()));
+                }
             }
         });
     }
 
     @Override
     public void handleManualExportRequest() {
+        currentProcessCancelled = false;
         executeAsyncWithLoading("Exportiere Modell...", () -> {
             try {
+                if (currentProcessCancelled) return;
                 Project project = Application.getInstance().getProject();
                 if (project == null) throw new IllegalStateException("Kein aktives Projekt.");
 
                 File xmlFile = ModelExportHelper.createXmlSnapshot(project);
+                if (currentProcessCancelled) return;
+
                 this.autoExportedFile = xmlFile;
 
                 SwingUtilities.invokeLater(() ->
                         JOptionPane.showMessageDialog(mainFrame, "Export erfolgreich!\n" + xmlFile.getName(), "Info", JOptionPane.INFORMATION_MESSAGE)
                 );
             } catch (Throwable t) {
-                t.printStackTrace();
-                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, "Export fehlgeschlagen: " + t.getMessage(), "Fehler", JOptionPane.ERROR_MESSAGE));
+                if (!currentProcessCancelled) {
+                    t.printStackTrace();
+                    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, "Export fehlgeschlagen: " + t.getMessage(), "Fehler", JOptionPane.ERROR_MESSAGE));
+                }
             }
         });
     }
@@ -262,11 +282,12 @@ public class Orchestrator implements UiController {
     @Override
     public List<ReviewDisplayItem> handleDisplayRequest(String reviewType) { return new ArrayList<>(); }
 
+    // --- FEATURE 3: Ladedialog mit Abbruch-Button ---
     private void executeAsyncWithLoading(String title, Runnable task) {
         JDialog loadingDialog = new JDialog(mainFrame, title, true);
         JPanel p = new JPanel(new BorderLayout(20, 20));
         p.setBackground(Color.WHITE);
-        p.setBorder(BorderFactory.createEmptyBorder(30, 40, 30, 40));
+        p.setBorder(BorderFactory.createEmptyBorder(20, 40, 20, 40));
 
         CircleLoader loader = new CircleLoader();
         loader.setPreferredSize(new Dimension(60, 60));
@@ -280,7 +301,16 @@ public class Orchestrator implements UiController {
         centerPanel.add(loader, BorderLayout.CENTER);
 
         p.add(centerPanel, BorderLayout.CENTER);
-        p.add(timerLabel, BorderLayout.SOUTH);
+        p.add(timerLabel, BorderLayout.NORTH);
+
+        // NEU: Abbruch Button
+        JPanel southPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        southPanel.setBackground(Color.WHITE);
+        JButton btnCancel = new JButton("Abbrechen");
+        btnCancel.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        btnCancel.setForeground(Color.RED);
+        southPanel.add(btnCancel);
+        p.add(southPanel, BorderLayout.SOUTH);
 
         loadingDialog.add(p);
         loadingDialog.setUndecorated(true);
@@ -295,17 +325,38 @@ public class Orchestrator implements UiController {
         });
         uiTimer.start();
 
-        Thread worker = new Thread(() -> {
-            try { task.run(); }
-            finally {
-                SwingUtilities.invokeLater(() -> {
-                    uiTimer.stop();
-                    loader.stopAnimation();
-                    loadingDialog.dispose();
-                });
+        Thread[] workerRef = new Thread[1];
+
+        btnCancel.addActionListener(e -> {
+            int choice = JOptionPane.showConfirmDialog(loadingDialog,
+                    "Möchten Sie die Prüfung wirklich abbrechen?",
+                    "Abbrechen", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+
+            if (choice == JOptionPane.YES_OPTION) {
+                currentProcessCancelled = true;
+                if (workerRef[0] != null) workerRef[0].interrupt();
+                uiTimer.stop();
+                loader.stopAnimation();
+                loadingDialog.dispose();
+                System.out.println("User cancelled operation.");
             }
         });
-        worker.start();
+
+        workerRef[0] = new Thread(() -> {
+            try {
+                task.run();
+            } finally {
+                if (loadingDialog.isVisible()) {
+                    SwingUtilities.invokeLater(() -> {
+                        uiTimer.stop();
+                        loader.stopAnimation();
+                        loadingDialog.dispose();
+                    });
+                }
+            }
+        });
+        workerRef[0].start();
+
         loadingDialog.setVisible(true);
     }
 
