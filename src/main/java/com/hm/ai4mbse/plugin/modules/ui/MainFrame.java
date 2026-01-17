@@ -23,11 +23,7 @@ public class MainFrame extends JFrame {
 
     private final UiController controller;
     private Map<String, JComponent> dynamicInputs;
-
-    // UI Komponenten Tab 1 (Regeln verwalten)
     private JPanel rulesListContainer;
-
-    // UI Komponenten Tab 2 (Review)
     private JComboBox<RuleDefinition> ruleSelector;
     private DefaultTableModel reviewTableModel;
 
@@ -37,8 +33,7 @@ public class MainFrame extends JFrame {
 
         setTitle("AI4MBSE - Assistant");
         setSize(1350, 850);
-        //setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); // BÖSE: Killt Catia
-        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // GUT: Schließt nur das Fenster
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setLocationRelativeTo(null);
 
         // --- LOGO LADEN ---
@@ -47,8 +42,6 @@ public class MainFrame extends JFrame {
             if (iconURL != null) {
                 ImageIcon icon = new ImageIcon(iconURL);
                 setIconImage(icon.getImage());
-
-                // Mac Dock Icon (optional, falls unterstützt)
                 if (System.getProperty("os.name").toLowerCase().contains("mac")) {
                     try {
                         java.awt.Taskbar.getTaskbar().setIconImage(icon.getImage());
@@ -58,7 +51,6 @@ public class MainFrame extends JFrame {
         } catch (Exception e) {
             System.err.println("Logo-Fehler: " + e.getMessage());
         }
-        // ------------------
 
         JTabbedPane tabbedPane = new JTabbedPane();
 
@@ -69,7 +61,6 @@ public class MainFrame extends JFrame {
         JPanel reviewPanel = createReviewPanel();
         tabbedPane.addTab("Modell reviewen", reviewPanel);
 
-        // Listener: Wenn man auf den Review-Tab wechselt, Dropdown aktualisieren
         tabbedPane.addChangeListener(e -> {
             if (tabbedPane.getSelectedComponent() == reviewPanel) {
                 refreshRuleDropdown();
@@ -80,13 +71,12 @@ public class MainFrame extends JFrame {
     }
 
     // =================================================================================
-    //       TAB 1: REGELN VERWALTEN
+    //       TAB 1: REGELN VERWALTEN (WIEDER DA!)
     // =================================================================================
 
     private JPanel createRulesPanel() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
 
-        // Linke Seite: Custom Liste
         rulesListContainer = new JPanel();
         rulesListContainer.setLayout(new BoxLayout(rulesListContainer, BoxLayout.Y_AXIS));
 
@@ -98,8 +88,6 @@ public class MainFrame extends JFrame {
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
 
         panel.add(scrollPane, BorderLayout.WEST);
-
-        // Rechte Seite: Formular
         panel.add(createFormPanel(), BorderLayout.CENTER);
 
         refreshRuleList();
@@ -118,9 +106,6 @@ public class MainFrame extends JFrame {
         int gridY = 0;
 
         for (FormFieldDefinition fieldDef : formStructure) {
-            // --- ZEILE A: Label und Input Feld ---
-
-            // 1. Label (Links)
             gbc.gridx = 0;
             gbc.gridy = gridY;
             gbc.weightx = 0.3;
@@ -128,16 +113,13 @@ public class MainFrame extends JFrame {
             gbc.insets = new Insets(10, 5, 0, 5);
             formContent.add(new JLabel(fieldDef.getLabel()), gbc);
 
-            // 2. Input Component (Rechts)
             JComponent inputComponent;
             JComponent visualComponent;
 
             if (isTargetField(fieldDef.getId())) {
-                // Großes Textfeld für "Ziel"
                 JTextArea area = new JTextArea(10, 20);
                 area.setLineWrap(true);
                 area.setWrapStyleWord(true);
-                // Font auf SansSerif für bessere Mac-Kompatibilität
                 area.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
                 area.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY));
 
@@ -161,7 +143,6 @@ public class MainFrame extends JFrame {
 
             dynamicInputs.put(fieldDef.getId(), inputComponent);
 
-            // --- ZEILE B: Beispieltext (unter dem Input) ---
             gridY++;
             gbc.gridx = 1;
             gbc.gridy = gridY;
@@ -176,7 +157,6 @@ public class MainFrame extends JFrame {
             gridY++;
         }
 
-        // --- BUTTONS (Ganz unten) ---
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton btnClear = new JButton("Neu / Leeren");
         JButton btnSave = new JButton("KI-Generieren & Speichern");
@@ -270,7 +250,6 @@ public class MainFrame extends JFrame {
             buttonPanel.setOpaque(false);
             buttonPanel.setVisible(false);
 
-            // Icons
             JButton btnEdit = createIconBtn("✏", "Regel bearbeiten", Color.DARK_GRAY);
             btnEdit.addActionListener(e -> loadRuleIntoForm(rule));
 
@@ -319,7 +298,6 @@ public class MainFrame extends JFrame {
             JButton b = new JButton(text);
             b.setToolTipText(tooltip);
             b.setForeground(fgColor);
-            // Segoe UI Symbol für Windows Emojis, sonst Fallback auf Standard
             b.setFont(new Font("Segoe UI Symbol", Font.PLAIN, 16));
             b.setMargin(new Insets(2, 6, 2, 6));
             b.setFocusPainted(false);
@@ -331,24 +309,22 @@ public class MainFrame extends JFrame {
     }
 
     // =================================================================================
-    //       TAB 2: MODELL REVIEWEN (MIT US-BUTTONS)
+    //       TAB 2: MODELL REVIEWEN (FEATURE 2: ANGEPASST)
     // =================================================================================
 
     private JPanel createReviewPanel() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
         panel.setBorder(new EmptyBorder(10, 10, 10, 10));
 
-        // --- OBERER BEREICH (Container für Konfiguration & US-Buttons) ---
         JPanel topContainer = new JPanel();
         topContainer.setLayout(new BoxLayout(topContainer, BoxLayout.Y_AXIS));
 
-        // 1. Control Leiste (Manuelle Auswahl)
+        // 1. Control Leiste
         JPanel controlPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
         controlPanel.setBorder(BorderFactory.createTitledBorder("Manuelle Prüfungskonfiguration"));
 
         JLabel lblSelect = new JLabel("Regel auswählen:");
 
-        // Dropdown für Regeln
         ruleSelector = new JComboBox<>();
         ruleSelector.setPreferredSize(new Dimension(300, 30));
         ruleSelector.setRenderer(new DefaultListCellRenderer() {
@@ -362,16 +338,15 @@ public class MainFrame extends JFrame {
             }
         });
 
-        // FIX 1: MIT Icon (Play), SansSerif Font
         JButton btnStart = new JButton("▶ Prüfung starten");
         btnStart.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
-        btnStart.setPreferredSize(new Dimension(200, 30));
+        btnStart.setPreferredSize(new Dimension(150, 30));
 
         controlPanel.add(lblSelect);
         controlPanel.add(ruleSelector);
         controlPanel.add(btnStart);
 
-        // XML EXPORT BUTTON
+        // --- FEATURE 1: XML EXPORT BUTTON ---
         JButton btnExport = new JButton("XML Exportieren");
         btnExport.setToolTipText("Erzeugt einen aktuellen Snapshot des Modells für die Prüfung");
         btnExport.setBackground(new Color(240, 240, 240));
@@ -384,18 +359,15 @@ public class MainFrame extends JFrame {
 
         controlPanel.add(Box.createHorizontalStrut(10)); // Abstand
         controlPanel.add(btnExport);
-        // ------------------------------
+        // ------------------------------------
 
-        // FIX 2: OHNE Icon, nur Text "API Key", SansSerif Font
         JButton btnApiKey = new JButton("API Key ändern");
         btnApiKey.setToolTipText("API Key manuell eingeben (für diese Sitzung)");
-
         btnApiKey.setBackground(Color.WHITE);
         btnApiKey.setForeground(Color.BLACK);
         btnApiKey.setContentAreaFilled(true);
         btnApiKey.setFocusPainted(false);
         btnApiKey.setBorder(new LineBorder(Color.LIGHT_GRAY, 1));
-
         btnApiKey.setPreferredSize(new Dimension(100, 30));
         btnApiKey.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
 
@@ -405,7 +377,7 @@ public class MainFrame extends JFrame {
                 controller.handleManualApiKeySubmit(input);
             }
         });
-        controlPanel.add(Box.createHorizontalStrut(20)); // Abstand
+        controlPanel.add(Box.createHorizontalStrut(20));
         controlPanel.add(btnApiKey);
 
         // 2. User Story Schnellzugriff
@@ -485,19 +457,28 @@ public class MainFrame extends JFrame {
         }
     }
 
+    // --- FEATURE 2 FIX: Result Object Handling ---
     private void executeReview(RuleDefinition rule) {
         reviewTableModel.setRowCount(0);
-        controller.handleRunReviewFromTab(rule, results -> {
-            for (ReviewDisplayItem item : results) {
-                reviewTableModel.addRow(new Object[]{
-                        item.getElementColumn(),
-                        item.getProblemColumn(),
-                        item.getConfidenceColumn(),
-                        item.getExplanationText()
-                });
+
+        controller.handleRunReviewFromTab(rule, result -> {
+            // UI entscheidet jetzt basierend auf Status
+            if (result.getStatus() == UiController.ReviewResult.Status.SUCCESS) {
+                JOptionPane.showMessageDialog(this, result.getMessage(), "Erfolg", JOptionPane.INFORMATION_MESSAGE);
             }
-            if (results.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Keine Verstöße gefunden (oder Parsing fehlgeschlagen).");
+            else if (result.getStatus() == UiController.ReviewResult.Status.FAILURE) {
+                JOptionPane.showMessageDialog(this, result.getMessage(), "Fehler", JOptionPane.ERROR_MESSAGE);
+            }
+            else {
+                // ISSUES FOUND -> Tabelle füllen
+                for (ReviewDisplayItem item : result.getItems()) {
+                    reviewTableModel.addRow(new Object[]{
+                            item.getElementColumn(),
+                            item.getProblemColumn(),
+                            item.getConfidenceColumn(),
+                            item.getExplanationText()
+                    });
+                }
             }
         });
     }

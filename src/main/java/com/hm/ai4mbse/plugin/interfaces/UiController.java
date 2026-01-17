@@ -8,30 +8,38 @@ import java.util.List;
 import java.util.function.Consumer;
 
 public interface UiController {
-    // Review Tab
-    List<ReviewDisplayItem> handleDisplayRequest(String reviewType);
 
-    // Startet Review aus dem Dropdown und gibt Ergebnisse zurück
-    void handleRunReviewFromTab(RuleDefinition rule, Consumer<List<ReviewDisplayItem>> resultCallback);
+    // --- NEU: Ergebnis-Container für saubere Kommunikation ---
+    class ReviewResult {
+        public enum Status { SUCCESS, FAILURE, ISSUES_FOUND }
 
-    // Regel Tab
+        private final Status status;
+        private final String message;         // Für Popup-Nachrichten
+        private final List<ReviewDisplayItem> items; // Für die Tabelle
+
+        public ReviewResult(Status status, String message, List<ReviewDisplayItem> items) {
+            this.status = status;
+            this.message = message;
+            this.items = items;
+        }
+
+        public Status getStatus() { return status; }
+        public String getMessage() { return message; }
+        public List<ReviewDisplayItem> getItems() { return items; }
+    }
+    // ---------------------------------------------------------
+
     List<FormFieldDefinition> requestRuleFormStructure();
-    void handleSaveRuleRequest(RuleDefinition rule);
-
-    // Lädt die manuell erstellten Regeln (Custom)
+    void handleSaveRuleRequest(RuleDefinition ruleInput);
+    void handleDeleteRuleRequest(RuleDefinition rule);
     List<RuleDefinition> handleLoadRulesRequest();
-
-    // NEU: Lädt die festen Standard-Regeln (Standard User Stories)
     List<RuleDefinition> handleLoadStandardRulesRequest();
 
-    // Regel löschen
-    void handleDeleteRuleRequest(RuleDefinition rule);
+    // WICHTIG: Signatur geändert -> Nimmt jetzt ReviewResult entgegen
+    void handleRunReviewFromTab(RuleDefinition rule, Consumer<ReviewResult> resultCallback);
 
-    // Einzelne Regel ausführen (Play-Button)
     void handleRunSingleRuleRequest(RuleDefinition rule);
-
-    // API Key manuell setzen
+    List<ReviewDisplayItem> handleDisplayRequest(String reviewType);
     void handleManualApiKeySubmit(String key);
-
     void handleManualExportRequest();
 }
