@@ -16,7 +16,9 @@ import com.nomagic.magicdraw.core.Project;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.geom.Arc2D;
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -38,16 +40,11 @@ public class Orchestrator implements UiController {
 
     private MainFrame mainFrame;
     private File autoExportedFile;
-
-    // Feature 3: Flag zum Abbrechen
     private volatile boolean currentProcessCancelled = false;
 
     public Orchestrator() {
         this.kiCommunication = new KI_Communication();
-
-        // --- FEATURE 5 ÄNDERUNG: Check hier ENTFERNT ---
-        // if (!ensureApiKeyExists()) { ... }
-        // -----------------------------------------------
+        // Feature 5: Lazy Check (Kein Check im Konstruktor)
 
         this.database = new JsonDatabaseService();
         this.visualization = new VisualizationService();
@@ -93,15 +90,13 @@ public class Orchestrator implements UiController {
 
     @Override
     public void handleSaveRuleRequest(RuleDefinition ruleInput) {
-        // --- FEATURE 5 ÄNDERUNG: Check HIERHIN verschoben ---
+        // Feature 5 Check
         if (!ensureApiKeyExists()) return;
-        // ----------------------------------------------------
 
         currentProcessCancelled = false;
         executeAsyncWithLoading("Regel wird generiert...", () -> {
             try {
                 if (currentProcessCancelled) return;
-
                 RuleCreationConfig config = new RuleCreationConfig();
                 config.setRegeltitel(ruleInput.get("regeltitel"));
                 config.setZiel(ruleInput.get("ziel"));
@@ -163,9 +158,8 @@ public class Orchestrator implements UiController {
 
     @Override
     public void handleRunReviewFromTab(RuleDefinition rule, Consumer<ReviewResult> resultCallback) {
-        // --- FEATURE 5 ÄNDERUNG: Check HIERHIN verschoben ---
+        // Feature 5 Check
         if (!ensureApiKeyExists()) return;
-        // ----------------------------------------------------
 
         String technicalRule = rule.get("technical_prompt");
         if (technicalRule == null || technicalRule.isEmpty()) {
@@ -178,7 +172,6 @@ public class Orchestrator implements UiController {
         executeAsyncWithLoading("Modellprüfung läuft...", () -> {
             try {
                 if (currentProcessCancelled) return;
-
                 if (this.autoExportedFile == null || !this.autoExportedFile.exists()) {
                     SwingUtilities.invokeLater(() ->
                             JOptionPane.showMessageDialog(mainFrame,
@@ -188,7 +181,6 @@ public class Orchestrator implements UiController {
                     return;
                 }
                 File xmlFile = this.autoExportedFile;
-
                 Path tempRuleFile = Files.createTempFile("active_rule_", ".txt");
                 Files.writeString(tempRuleFile, technicalRule);
 
@@ -203,14 +195,13 @@ public class Orchestrator implements UiController {
                 Path tempDir = Files.createTempDirectory("ai4mbse_run_");
                 Path dummyJsonAnchor = tempDir.resolve("anchor.json");
 
-                // Start Review
                 runReviewLogic.startReview(config, dummyJsonAnchor);
 
                 if (currentProcessCancelled) {
                     System.out.println("Prozess wurde abgebrochen. Ergebnisse werden verworfen.");
                     Files.deleteIfExists(tempRuleFile);
                     try { Files.deleteIfExists(tempDir); } catch (Exception ignored){}
-                    return; // NICHTS ANZEIGEN
+                    return;
                 }
 
                 String runId = config.getParameters().get("runId");
@@ -240,11 +231,9 @@ public class Orchestrator implements UiController {
                             uiResult = new ReviewResult(ReviewResult.Status.ISSUES_FOUND, "Fehler gefunden.", items);
                             break;
                     }
-
                     if (!currentProcessCancelled) {
                         SwingUtilities.invokeLater(() -> resultCallback.accept(uiResult));
                     }
-
                 } else {
                     if (!currentProcessCancelled)
                         SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, "Fehler: Keine Ergebnisdatei."));
@@ -284,13 +273,46 @@ public class Orchestrator implements UiController {
         });
     }
 
-    // ACHTUNG: Feature 4 ist hier noch NICHT drin, da wir Feature 5 zuerst machen.
-    // Die Methode handleExportReportRequest fehlt also absichtlich (oder ist leer).
-    // Wenn du sie im Interface hast, müssen wir sie leer implementieren:
+    // --- FEATURE 4: IMPLEMENTIERUNG CSV EXPORT ---
+    @Override
+    public void handleExportReportRequest(File targetFile, List<ReviewDisplayItem> results) {
+        executeAsyncWithLoading("Speichere Bericht...", () -> {
+            try {
+                // Wir nutzen BOM für Excel und Semikolon als Trenner (Deutsch)
+                try (BufferedWriter writer = new BufferedWriter(new FileWriter(targetFile, StandardCharsets.UTF_8))) {
+                    writer.write('\ufeff'); // BOM Header
+                    writer.write("Betroffenes Element;Problem;Konfidenz;Vorschlag\n");
 
-    // Fallback falls Interface Feature 4 schon hat:
-    // @Override
-    // public void handleExportReportRequest(File targetFile, List<ReviewDisplayItem> results) { }
+                    for (ReviewDisplayItem item : results) {
+                        // Daten säubern (Semikolons und Zeilenumbrüche entfernen)
+                        String element = cleanCsv(item.getElementColumn());
+                        String problem = cleanCsv(item.getProblemColumn());
+                        String conf = cleanCsv(item.getConfidenceColumn());
+                        // HTML Tags aus der Erklärung entfernen
+                        String explanation = cleanCsv(item.getExplanationText().replaceAll("<[^>]*>", " "));
+
+                        writer.write(element + ";" + problem + ";" + conf + ";" + explanation + "\n");
+                    }
+                }
+
+                SwingUtilities.invokeLater(() ->
+                        JOptionPane.showMessageDialog(mainFrame, "Bericht gespeichert unter:\n" + targetFile.getAbsolutePath(), "Gespeichert", JOptionPane.INFORMATION_MESSAGE)
+                );
+
+            } catch (IOException e) {
+                e.printStackTrace();
+                SwingUtilities.invokeLater(() ->
+                        JOptionPane.showMessageDialog(mainFrame, "Fehler beim Speichern: " + e.getMessage(), "Fehler", JOptionPane.ERROR_MESSAGE)
+                );
+            }
+        });
+    }
+
+    // Hilfsmethode: Ersetzt kritische Zeichen für CSV
+    private String cleanCsv(String input) {
+        if (input == null) return "";
+        return input.replace(";", ",").replace("\n", " ").replace("\r", " ").trim();
+    }
 
     @Override
     public List<ReviewDisplayItem> handleDisplayRequest(String reviewType) { return new ArrayList<>(); }
@@ -315,7 +337,7 @@ public class Orchestrator implements UiController {
         p.add(centerPanel, BorderLayout.CENTER);
         p.add(timerLabel, BorderLayout.NORTH);
 
-        // Abbruch Button
+        // Feature 3: Abbruch Button
         JPanel southPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
         southPanel.setBackground(Color.WHITE);
         JButton btnCancel = new JButton("Abbrechen");
@@ -396,28 +418,20 @@ public class Orchestrator implements UiController {
         }
     }
 
-    // Feature 5 Hilfsmethoden
     private boolean ensureApiKeyExists() {
         while (!hasValidKey()) {
             Object[] options = {"Erneut prüfen", "Hilfe (?)", "Manuell eingeben"};
-            // Wir nutzen mainFrame als Parent, falls vorhanden
             Component parent = (mainFrame != null) ? mainFrame : null;
-
             int choice = JOptionPane.showOptionDialog(parent,
                     "Der GEMINI_API_KEY wurde nicht gefunden!\nDas Plugin kann ohne Key keine Anfragen senden.", "Konfiguration fehlt",
                     JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.ERROR_MESSAGE, null, options, options[0]);
-
-            if (choice == 0) {
-                continue;
-            } else if (choice == 1) {
-                showApiHelp();
-            } else if (choice == 2) {
+            if (choice == 0) continue;
+            else if (choice == 1) showApiHelp();
+            else if (choice == 2) {
                 String input = JOptionPane.showInputDialog(parent, "Bitte API Key hier einfügen:", "Manuelle Eingabe", JOptionPane.PLAIN_MESSAGE);
                 handleManualApiKeySubmit(input);
                 if (hasValidKey()) return true;
-            } else {
-                return false; // User hat Abbrechen gedrückt
-            }
+            } else return false;
         }
         return true;
     }

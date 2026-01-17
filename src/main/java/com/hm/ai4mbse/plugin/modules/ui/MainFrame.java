@@ -9,15 +9,18 @@ import javax.swing.*;
 import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableCellRenderer;
 import java.awt.*;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.io.File;
 
 public class MainFrame extends JFrame {
 
@@ -26,6 +29,10 @@ public class MainFrame extends JFrame {
     private JPanel rulesListContainer;
     private JComboBox<RuleDefinition> ruleSelector;
     private DefaultTableModel reviewTableModel;
+
+    // FEATURE 4: Button Referenz & Daten
+    private JButton btnSaveReport;
+    private List<ReviewDisplayItem> currentResults = new ArrayList<>();
 
     public MainFrame(UiController controller) {
         this.controller = controller;
@@ -36,7 +43,6 @@ public class MainFrame extends JFrame {
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setLocationRelativeTo(null);
 
-        // --- LOGO LADEN ---
         try {
             java.net.URL iconURL = getClass().getResource("/images/logo.png");
             if (iconURL != null) {
@@ -53,11 +59,8 @@ public class MainFrame extends JFrame {
         }
 
         JTabbedPane tabbedPane = new JTabbedPane();
-
-        // Tab 1: Regeln verwalten
         tabbedPane.addTab("Regeln verwalten", createRulesPanel());
 
-        // Tab 2: Modell reviewen
         JPanel reviewPanel = createReviewPanel();
         tabbedPane.addTab("Modell reviewen", reviewPanel);
 
@@ -69,10 +72,6 @@ public class MainFrame extends JFrame {
 
         add(tabbedPane);
     }
-
-    // =================================================================================
-    //       TAB 1: REGELN VERWALTEN (WIEDER DA!)
-    // =================================================================================
 
     private JPanel createRulesPanel() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
@@ -308,10 +307,6 @@ public class MainFrame extends JFrame {
         }
     }
 
-    // =================================================================================
-    //       TAB 2: MODELL REVIEWEN (FEATURE 2: ANGEPASST)
-    // =================================================================================
-
     private JPanel createReviewPanel() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
         panel.setBorder(new EmptyBorder(10, 10, 10, 10));
@@ -346,7 +341,6 @@ public class MainFrame extends JFrame {
         controlPanel.add(ruleSelector);
         controlPanel.add(btnStart);
 
-        // --- FEATURE 1: XML EXPORT BUTTON ---
         JButton btnExport = new JButton("XML Exportieren");
         btnExport.setToolTipText("Erzeugt einen aktuellen Snapshot des Modells für die Prüfung");
         btnExport.setBackground(new Color(240, 240, 240));
@@ -357,9 +351,8 @@ public class MainFrame extends JFrame {
             controller.handleManualExportRequest();
         });
 
-        controlPanel.add(Box.createHorizontalStrut(10)); // Abstand
+        controlPanel.add(Box.createHorizontalStrut(10));
         controlPanel.add(btnExport);
-        // ------------------------------------
 
         JButton btnApiKey = new JButton("API Key ändern");
         btnApiKey.setToolTipText("API Key manuell eingeben (für diese Sitzung)");
@@ -427,6 +420,30 @@ public class MainFrame extends JFrame {
         panel.add(topContainer, BorderLayout.NORTH);
         panel.add(new JScrollPane(table), BorderLayout.CENTER);
 
+        // --- FEATURE 4: Bottom Bar mit Export Button ---
+        JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        btnSaveReport = new JButton("Bericht speichern (.csv)");
+        btnSaveReport.setEnabled(false); // Erst aktivieren wenn Ergebnisse da sind
+        btnSaveReport.addActionListener(e -> {
+            if (currentResults.isEmpty()) return;
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("Ergebnisbericht speichern");
+            fileChooser.setFileFilter(new FileNameExtensionFilter("CSV Datei (*.csv)", "csv"));
+            fileChooser.setSelectedFile(new File("review_report.csv"));
+
+            int userSelection = fileChooser.showSaveDialog(this);
+            if (userSelection == JFileChooser.APPROVE_OPTION) {
+                File fileToSave = fileChooser.getSelectedFile();
+                if (!fileToSave.getName().toLowerCase().endsWith(".csv")) {
+                    fileToSave = new File(fileToSave.getParentFile(), fileToSave.getName() + ".csv");
+                }
+                controller.handleExportReportRequest(fileToSave, currentResults);
+            }
+        });
+        bottomPanel.add(btnSaveReport);
+        panel.add(bottomPanel, BorderLayout.SOUTH);
+        // -----------------------------------------------
+
         btnStart.addActionListener(e -> {
             RuleDefinition selectedRule = (RuleDefinition) ruleSelector.getSelectedItem();
             if (selectedRule == null) {
@@ -457,12 +474,12 @@ public class MainFrame extends JFrame {
         }
     }
 
-    // --- FEATURE 2 FIX: Result Object Handling ---
     private void executeReview(RuleDefinition rule) {
         reviewTableModel.setRowCount(0);
+        currentResults.clear();
+        btnSaveReport.setEnabled(false); // Reset
 
         controller.handleRunReviewFromTab(rule, result -> {
-            // UI entscheidet jetzt basierend auf Status
             if (result.getStatus() == UiController.ReviewResult.Status.SUCCESS) {
                 JOptionPane.showMessageDialog(this, result.getMessage(), "Erfolg", JOptionPane.INFORMATION_MESSAGE);
             }
@@ -470,7 +487,10 @@ public class MainFrame extends JFrame {
                 JOptionPane.showMessageDialog(this, result.getMessage(), "Fehler", JOptionPane.ERROR_MESSAGE);
             }
             else {
-                // ISSUES FOUND -> Tabelle füllen
+                // ISSUES FOUND
+                currentResults = result.getItems(); // Ergebnisse speichern
+                btnSaveReport.setEnabled(true);     // Button aktivieren
+
                 for (ReviewDisplayItem item : result.getItems()) {
                     reviewTableModel.addRow(new Object[]{
                             item.getElementColumn(),
