@@ -402,7 +402,7 @@ public class MainFrame extends JFrame {
         topContainer.add(usPanel);
 
         // --- TABELLE ---
-        String[] columns = {"Betroffenes Element", "Problem / Vorschlag", "Konfidenz", "Hilfe (?)"};
+        String[] columns = {"Betroffenes Element", "Problem / Vorschlag", "Priorität", "Hilfe (?)"};
         reviewTableModel = new DefaultTableModel(columns, 0) {
             public boolean isCellEditable(int row, int column) { return column == 3; }
         };

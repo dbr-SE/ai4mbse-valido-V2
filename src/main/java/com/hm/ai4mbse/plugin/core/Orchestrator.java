@@ -90,7 +90,6 @@ public class Orchestrator implements UiController {
 
     @Override
     public void handleSaveRuleRequest(RuleDefinition ruleInput) {
-        // Feature 5 Check
         if (!ensureApiKeyExists()) return;
 
         currentProcessCancelled = false;
@@ -124,10 +123,7 @@ public class Orchestrator implements UiController {
                 database.saveRule(finalRule);
                 SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, "Regel erfolgreich generiert und gespeichert!"));
             } catch (Exception e) {
-                if (!currentProcessCancelled) {
-                    e.printStackTrace();
-                    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, "Fehler: " + e.getMessage()));
-                }
+                handleGeminiError(e);
             }
         });
     }
@@ -158,7 +154,6 @@ public class Orchestrator implements UiController {
 
     @Override
     public void handleRunReviewFromTab(RuleDefinition rule, Consumer<ReviewResult> resultCallback) {
-        // Feature 5 Check
         if (!ensureApiKeyExists()) return;
 
         String technicalRule = rule.get("technical_prompt");
@@ -239,10 +234,7 @@ public class Orchestrator implements UiController {
                         SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, "Fehler: Keine Ergebnisdatei."));
                 }
             } catch (Exception e) {
-                if (!currentProcessCancelled) {
-                    e.printStackTrace();
-                    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, "Fehler: " + e.getMessage()));
-                }
+                handleGeminiError(e);
             }
         });
     }
@@ -273,32 +265,26 @@ public class Orchestrator implements UiController {
         });
     }
 
-    // --- FEATURE 4: IMPLEMENTIERUNG CSV EXPORT ---
     @Override
     public void handleExportReportRequest(File targetFile, List<ReviewDisplayItem> results) {
         executeAsyncWithLoading("Speichere Bericht...", () -> {
             try {
-                // Wir nutzen BOM für Excel und Semikolon als Trenner (Deutsch)
                 try (BufferedWriter writer = new BufferedWriter(new FileWriter(targetFile, StandardCharsets.UTF_8))) {
-                    writer.write('\ufeff'); // BOM Header
-                    writer.write("Betroffenes Element;Problem;Konfidenz;Vorschlag\n");
+                    writer.write('\ufeff');
+                    writer.write("Betroffenes Element;Problem;Priorität;Vorschlag\n");
 
                     for (ReviewDisplayItem item : results) {
-                        // Daten säubern (Semikolons und Zeilenumbrüche entfernen)
                         String element = cleanCsv(item.getElementColumn());
                         String problem = cleanCsv(item.getProblemColumn());
                         String conf = cleanCsv(item.getConfidenceColumn());
-                        // HTML Tags aus der Erklärung entfernen
                         String explanation = cleanCsv(item.getExplanationText().replaceAll("<[^>]*>", " "));
 
                         writer.write(element + ";" + problem + ";" + conf + ";" + explanation + "\n");
                     }
                 }
-
                 SwingUtilities.invokeLater(() ->
                         JOptionPane.showMessageDialog(mainFrame, "Bericht gespeichert unter:\n" + targetFile.getAbsolutePath(), "Gespeichert", JOptionPane.INFORMATION_MESSAGE)
                 );
-
             } catch (IOException e) {
                 e.printStackTrace();
                 SwingUtilities.invokeLater(() ->
@@ -308,7 +294,58 @@ public class Orchestrator implements UiController {
         });
     }
 
-    // Hilfsmethode: Ersetzt kritische Zeichen für CSV
+    // --- OPTIMIERTE FEHLERBEHANDLUNG ---
+    private void handleGeminiError(Exception e) {
+        if (currentProcessCancelled) return;
+
+        // Sicherstellen, dass msg nicht null ist (bei NullPointerException)
+        String rawMsg = e.getMessage();
+        String msg = (rawMsg != null) ? rawMsg : e.toString();
+
+        StringBuilder userText = new StringBuilder();
+        userText.append("Prüfung konnte nicht abgeschlossen werden.\n\n");
+
+        boolean isKnownError = false;
+
+        // --- FALL 1: Bekannte API-Fehler (Schön dargestellt) ---
+
+        if (msg.contains("429") || msg.toLowerCase().contains("quota") || msg.contains("423")) {
+            userText.append("Grund: Nutzungslimit (Quota) von Google Gemini überschritten.\n");
+            userText.append("Lösung: Bitte warten Sie kurz oder nutzen Sie einen anderen API Key.\n");
+            isKnownError = true;
+        }
+        else if (msg.contains("400") || msg.contains("401") || msg.contains("403")) {
+            userText.append("Grund: Der API Key scheint ungültig zu sein.\n");
+            userText.append("Lösung: Bitte prüfen Sie den Key.\n");
+            isKnownError = true;
+        }
+        else if (msg.contains("UnknownHost") || msg.contains("Socket") || msg.contains("Connect")) {
+            userText.append("Grund: Keine Verbindung zum Internet.\n");
+            userText.append("Lösung: Bitte prüfen Sie Ihre Verbindung.\n");
+            isKnownError = true;
+        }
+
+        // --- FALL 2: Unbekannte Fehler (Müssen angezeigt werden zum Fixen!) ---
+
+        if (!isKnownError) {
+            userText.append("Ein unerwarteter technischer Fehler ist aufgetreten.\n");
+            // HIER zeigen wir die Fehlermeldung an, damit wir wissen, was los ist
+            userText.append("Fehler-Detail: ").append(msg).append("\n");
+        }
+
+        // Allgemeiner Hinweis für alle Fälle
+        userText.append("\nSie können im Hauptmenü über 'API Key ändern' jederzeit einen neuen Schlüssel hinterlegen.");
+
+        // Stacktrace in die Konsole für dich als Entwickler
+        System.err.println("--- VALIDO ERROR ---");
+        e.printStackTrace();
+
+        SwingUtilities.invokeLater(() ->
+                JOptionPane.showMessageDialog(mainFrame, userText.toString(), "Fehler", JOptionPane.ERROR_MESSAGE)
+        );
+    }
+    // ----------------------------------------------------
+
     private String cleanCsv(String input) {
         if (input == null) return "";
         return input.replace(";", ",").replace("\n", " ").replace("\r", " ").trim();
@@ -337,7 +374,6 @@ public class Orchestrator implements UiController {
         p.add(centerPanel, BorderLayout.CENTER);
         p.add(timerLabel, BorderLayout.NORTH);
 
-        // Feature 3: Abbruch Button
         JPanel southPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
         southPanel.setBackground(Color.WHITE);
         JButton btnCancel = new JButton("Abbrechen");
