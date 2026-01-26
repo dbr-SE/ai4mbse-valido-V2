@@ -121,18 +121,28 @@ public class InstallerMain extends JFrame {
         GridBagConstraints g = new GridBagConstraints();
         g.insets = new Insets(5,5,5,5); g.fill = GridBagConstraints.HORIZONTAL;
 
-        // FIX 1: Beispielpfad hinzugefügt
+        // --- HIER IST DIE ÄNDERUNG (FIX 1) ---
+        // Alter Text entfernt, neuer Klartext:
         g.gridx=0; g.gridy=0; g.gridwidth=2;
-        p.add(new JLabel("1. Catia Magic Installationsordner (z.B. C:\\Program Files\\Dassault Systemes\\...):"), g);
+        JLabel lblInfo = new JLabel("<html><b>1. Plugin-Ordner wählen:</b><br>" +
+                "Bitte wählen Sie den Ordner 'plugins' im Installationsverzeichnis von MagicDraw / Cameo Systems Modeler.<br>" +
+                "<i style='color:gray'>Beispiel: .../MagicDraw/plugins</i></html>");
+        p.add(lblInfo, g);
 
-        g.gridy++; g.gridwidth=1; g.weightx=1.0; txtCatiaPath = new JTextField(); p.add(txtCatiaPath, g);
+        g.gridy++; g.gridwidth=1; g.weightx=1.0; txtCatiaPath = new JTextField();
+        // WICHTIG: Textfeld bleibt leer, keine verwirrenden Vorgaben
+        txtCatiaPath.setText("");
+        p.add(txtCatiaPath, g);
+
         g.gridx=1; g.weightx=0.0; JButton b1 = new JButton("Suchen..."); b1.addActionListener(e -> chooseDir(txtCatiaPath)); p.add(b1, g);
 
-        g.gridx=0; g.gridy++; g.gridwidth=2; g.weightx=0.0; p.add(new JLabel("2. Ordner für KI-Exporte (XML):"), g);
+        g.gridx=0; g.gridy++; g.gridwidth=2; g.weightx=0.0; p.add(new JLabel("2. Ordner für KI-Exporte (XML) wählen:"), g);
         g.gridy++; g.gridwidth=1; g.weightx=1.0; txtExportPath = new JTextField(); p.add(txtExportPath, g);
         g.gridx=1; g.weightx=0.0; JButton b2 = new JButton("Suchen..."); b2.addActionListener(e -> chooseDir(txtExportPath)); p.add(b2, g);
 
-        detectPaths();
+        // detectPaths(); // Diese Automatik lassen wir lieber weg, wenn sie Verwirrung stiftet, oder passen sie an.
+        // Besser: Export-Pfad vorschlagen (Dokumente), aber Catia-Pfad leer lassen, damit der User nachdenkt.
+        txtExportPath.setText(new File(System.getProperty("user.home"), "Documents").getAbsolutePath());
 
         JButton next = new JButton("Weiter ➔");
         next.addActionListener(e -> {
@@ -154,7 +164,6 @@ public class InstallerMain extends JFrame {
         g.insets = new Insets(5,5,5,5); g.fill=GridBagConstraints.HORIZONTAL;
 
         g.gridx=0; g.gridy=0;
-        // FIX 2: Erklärungstext erweitert
         p.add(new JLabel("<html><b>Gemini API Key</b><br>" +
                 "Diesen Key erhalten Sie via Google AI Studio.<br>" +
                 "Er wird lokal als Umgebungsvariable (GEMINI_API_KEY) gespeichert.</html>"), g);
@@ -191,20 +200,6 @@ public class InstallerMain extends JFrame {
         JFileChooser c = new JFileChooser(); c.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         if(!f.getText().isBlank()) c.setCurrentDirectory(new File(f.getText()));
         if(c.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) f.setText(c.getSelectedFile().getAbsolutePath());
-    }
-
-    private void detectPaths() {
-        txtExportPath.setText(new File(System.getProperty("user.home"), "Documents").getAbsolutePath());
-        File pot = null;
-        if(isMac) pot = new File("/Applications/Cameo Systems Modeler.app");
-        if(isWindows) {
-            File p = new File("C:\\Program Files\\Dassault Systemes");
-            if(p.exists()) {
-                File[] s = p.listFiles((d,n) -> n.contains("Magic") || n.contains("Cameo"));
-                if(s!=null && s.length>0) pot = s[0];
-            }
-        }
-        if(pot!=null) txtCatiaPath.setText(pot.getAbsolutePath());
     }
 
     private void log(String m) {
@@ -248,6 +243,7 @@ public class InstallerMain extends JFrame {
                 if (catiaInstallDir.getName().equalsIgnoreCase("plugins")) {
                     pluginsBase = catiaInstallDir;
                 } else {
+                    // Falls der User nicht direkt den Plugins Ordner gewählt hat, versuchen wir ihn zu finden
                     if (isMac && catiaInstallDir.getName().endsWith(".app")) {
                         File c = new File(catiaInstallDir, "Contents/plugins");
                         File j = new File(catiaInstallDir, "Contents/Resources/Java/plugins");
@@ -293,7 +289,6 @@ public class InstallerMain extends JFrame {
                 log("--- Installation erfolgreich! ---");
                 log("Bitte starten Sie Catia Magic neu.");
 
-                // FIX 3: Titel ändern & Hinweis geben
                 SwingUtilities.invokeLater(() -> {
                     setTitle(APP_NAME + " - Fertig");
                     JOptionPane.showMessageDialog(this, "Installation erfolgreich!\nSie können dieses Fenster nun schließen.");
